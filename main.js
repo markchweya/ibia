@@ -48,20 +48,27 @@ function loadSettings() {
     const p = settingsPath();
     if (!fs.existsSync(p)) {
       return {
-        provider: "foundry", // "foundry" | "openai"
+        provider: "ollama", // "ollama" | "foundry" | "openai"
         openai_api_key: "",
-        foundry_prefer: "phi-3.5" // e.g. "phi-4" or exact model id
+        local_prefer: "phi-3.5",
+        foundry_prefer: "phi-3.5" // legacy compatibility
       };
     }
     const raw = fs.readFileSync(p, "utf-8");
     const data = JSON.parse(raw);
     return {
-      provider: data.provider || "foundry",
+      provider: data.provider || "ollama",
       openai_api_key: data.openai_api_key || "",
-      foundry_prefer: data.foundry_prefer || "phi-3.5"
+      local_prefer: data.local_prefer || data.foundry_prefer || "phi-3.5",
+      foundry_prefer: data.foundry_prefer || data.local_prefer || "phi-3.5"
     };
   } catch {
-    return { provider: "foundry", openai_api_key: "", foundry_prefer: "phi-3.5" };
+    return {
+      provider: "ollama",
+      openai_api_key: "",
+      local_prefer: "phi-3.5",
+      foundry_prefer: "phi-3.5"
+    };
   }
 }
 
@@ -193,6 +200,72 @@ async function runFoundry(args) {
   return String(stdout || "");
 }
 
+/* -----------------------------
+   Ollama helpers
+------------------------------ */
+const OLLAMA_BASE_URL = "http://127.0.0.1:11434";
+
+async function ollamaListModels() {
+  const r = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
+  if (!r.ok) {
+    const t = await r.text().catch(() => "");
+    throw new Error(`Ollama /api/tags failed: ${t || r.statusText}`);
+  }
+
+  return { base: OLLAMA_BASE_URL, json: await r.json() };
+}
+
+function pickOllamaModelId(modelsJson, prefer = "phi-3.5") {
+  const arr = Array.isArray(modelsJson?.models) ? modelsJson.models : [];
+  if (!arr.length) return "";
+
+  const p = String(prefer || "").toLowerCase().trim();
+
+  const exact = arr.find((m) => String(m?.name || "").toLowerCase() === p);
+  if (exact?.name) return exact.name;
+
+  const anyMatch = arr.find((m) => String(m?.name || "").toLowerCase().includes(p));
+  if (anyMatch?.name) return anyMatch.name;
+
+  const phi35 = arr.find((m) => /phi[- ]?3(\.5)?/i.test(String(m?.name || "")));
+  if (phi35?.name) return phi35.name;
+
+  const llama = arr.find((m) => /llama/i.test(String(m?.name || "")));
+  if (llama?.name) return llama.name;
+
+  return arr[0]?.name || "";
+}
+
+async function ollamaChat(messages) {
+  const s = loadSettings();
+  const prefer = s.local_prefer || s.foundry_prefer || "phi-3.5";
+
+  const { json } = await ollamaListModels();
+  const modelId = pickOllamaModelId(json, prefer);
+
+  if (!modelId) throw new Error("No Ollama models found.");
+
+  const payload = {
+    model: modelId,
+    messages,
+    stream: false
+  };
+
+  const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!r.ok) {
+    const t = await r.text().catch(() => "");
+    throw new Error("Ollama chat failed: " + (t || r.statusText));
+  }
+
+  const data = await r.json();
+  return data?.message?.content || "";
+}
+
 async function getFoundryV1Base() {
   // Example:
   // "🟢 Model management service is running on http://127.0.0.1:63171/openai/status"
@@ -258,7 +331,7 @@ function pickFoundryModelId(modelsJson, prefer = "phi-3.5") {
 
 async function foundryChat(messages) {
   const s = loadSettings();
-  const prefer = s.foundry_prefer || "phi-3.5";
+  const prefer = s.local_prefer || s.foundry_prefer || "phi-3.5";
 
   const { base, json } = await foundryListModels();
   const modelId = pickFoundryModelId(json, prefer);
@@ -361,15 +434,17 @@ function wireIPC() {
   ipcMain.handle("settings:get", () => {
     const s = loadSettings();
     return {
-      provider: s.provider || "foundry",
+      provider: s.provider || "ollama",
       openaiKeySet: !!(s.openai_api_key && s.openai_api_key.trim().length > 0),
-      foundryPrefer: s.foundry_prefer || "phi-3.5"
+      foundryPrefer: s.local_prefer || s.foundry_prefer || "phi-3.5"
     };
   });
 
   ipcMain.handle("settings:setProvider", (evt, provider) => {
     const p = String(provider || "").trim();
-    if (!["foundry", "openai"].includes(p)) return { ok: false, error: "Invalid provider" };
+    if (!["ollama", "foundry", "openai"].includes(p)) {
+      return { ok: false, error: "Invalid provider" };
+    }
     saveSettings({ provider: p });
     return { ok: true };
   });
@@ -384,7 +459,7 @@ function wireIPC() {
   ipcMain.handle("settings:setFoundryPrefer", (evt, prefer) => {
     const v = String(prefer || "").trim();
     if (!v) return { ok: false, error: "Empty prefer" };
-    saveSettings({ foundry_prefer: v });
+    saveSettings({ foundry_prefer: v, local_prefer: v });
     return { ok: true };
   });
 
@@ -401,10 +476,30 @@ function wireIPC() {
       };
     }
 
+    if (s.provider === "ollama") {
+      try {
+        const { base, json } = await ollamaListModels();
+        const picked = pickOllamaModelId(json, s.local_prefer || s.foundry_prefer || "phi-3.5");
+        return {
+          provider: "ollama",
+          ok: true,
+          baseUrl: base,
+          model: picked
+        };
+      } catch (e) {
+        return {
+          provider: "ollama",
+          ok: false,
+          model: "",
+          error: e?.message || String(e)
+        };
+      }
+    }
+
     // Foundry
     try {
       const { base, json } = await foundryListModels();
-      const picked = pickFoundryModelId(json, s.foundry_prefer || "phi-3.5");
+      const picked = pickFoundryModelId(json, s.local_prefer || s.foundry_prefer || "phi-3.5");
       return {
         provider: "foundry",
         ok: true,
@@ -429,6 +524,10 @@ function wireIPC() {
       const key = (s.openai_api_key || "").trim();
       if (!key) throw new Error("OpenAI key not set");
       return await openaiChat(key, safeMessages);
+    }
+
+    if (s.provider === "ollama") {
+      return await ollamaChat(safeMessages);
     }
 
     return await foundryChat(safeMessages);
