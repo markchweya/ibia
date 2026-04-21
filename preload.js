@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld("api", {
   settingsSetOpenAIKey: (key) => ipcRenderer.invoke("settings:setApiKey", key),
   settingsSetFoundryPrefer: (value) => ipcRenderer.invoke("settings:setFoundryPrefer", value),
   pickFiles: () => ipcRenderer.invoke("files:pick"),
+  loadFilePaths: (paths) => ipcRenderer.invoke("files:loadPaths", paths),
   saveTextFile: (payload) => ipcRenderer.invoke("files:saveText", payload),
   historyList: () => ipcRenderer.invoke("history:list"),
   historyGet: (id) => ipcRenderer.invoke("history:get", id),
@@ -26,6 +27,7 @@ contextBridge.exposeInMainWorld("api", {
   historyDelete: (id) => ipcRenderer.invoke("history:delete", id),
   libraryList: () => ipcRenderer.invoke("library:list"),
   libraryImport: () => ipcRenderer.invoke("library:import"),
+  libraryImportPaths: (paths) => ipcRenderer.invoke("library:importPaths", paths),
   libraryRemove: (id) => ipcRenderer.invoke("library:remove", id),
   librarySearch: (queryText) => ipcRenderer.invoke("library:search", queryText),
 

@@ -1,5 +1,6 @@
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 
@@ -218,6 +219,10 @@ function libraryPath() {
   return path.join(app.getPath("userData"), "document-library.json");
 }
 
+function extractorScriptPath() {
+  return path.join(__dirname, "scripts", "extract_assets.py");
+}
+
 function loadSettings() {
   try {
     const p = settingsPath();
@@ -307,6 +312,21 @@ function saveLibraryStore(store) {
   return store;
 }
 
+function resolvePythonExecutable() {
+  const bundled = path.join(
+    os.homedir(),
+    ".cache",
+    "codex-runtimes",
+    "codex-primary-runtime",
+    "dependencies",
+    "python",
+    "python.exe"
+  );
+
+  if (fs.existsSync(bundled)) return bundled;
+  return "python";
+}
+
 function createConversationId() {
   return `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -364,8 +384,15 @@ function sanitizeConversationPayload(payload = {}) {
       name: String(file?.name || ""),
       path: String(file?.path || ""),
       size: Number(file?.size || 0),
+      mimeType: String(file?.mimeType || ""),
+      mediaKind: String(file?.mediaKind || "text"),
       content: String(file?.content || ""),
       chunks: Array.isArray(file?.chunks) ? file.chunks.map((chunk) => String(chunk || "")) : [],
+      imageBase64: file?.imageBase64 ? String(file.imageBase64) : "",
+      videoFramesBase64: Array.isArray(file?.videoFramesBase64) ? file.videoFramesBase64.map((frame) => String(frame || "")) : [],
+      width: Number(file?.width || 0),
+      height: Number(file?.height || 0),
+      duration: Number(file?.duration || 0),
       truncated: !!file?.truncated,
       charCount: Number(file?.charCount || String(file?.content || "").length)
     })),
@@ -495,6 +522,10 @@ function pickModelFromNames(names, preferredPatterns = []) {
   return items[0];
 }
 
+function isVisionModelName(name) {
+  return /llava|vision|gemma3|qwen2\.?5.?vl|minicpm|moondream|bakllava|llama3\.2-vision/i.test(String(name || ""));
+}
+
 function isLikelyTextFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   if (TEXT_FILE_EXTENSIONS.has(ext)) return true;
@@ -555,25 +586,12 @@ async function pickFilesForUpload() {
     return { canceled: true, files: [], rejected: [] };
   }
 
-  const files = [];
-  const rejected = [];
-
-  for (const filePath of result.filePaths) {
-    try {
-      files.push(readUploadedFile(filePath));
-    } catch (error) {
-      rejected.push({
-        path: filePath,
-        name: path.basename(filePath),
-        error: error.message || String(error)
-      });
-    }
-  }
+  const extracted = await extractFilesFromPaths(result.filePaths);
 
   return {
     canceled: false,
-    files,
-    rejected
+    files: extracted.files,
+    rejected: extracted.errors
   };
 }
 
@@ -598,34 +616,37 @@ async function importLibraryDocuments() {
     return { canceled: true, added: [], rejected: [] };
   }
 
+  return await importLibraryDocumentsFromPaths(result.filePaths);
+}
+
+async function importLibraryDocumentsFromPaths(filePaths) {
+  const safePaths = Array.isArray(filePaths)
+    ? filePaths.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+
+  if (!safePaths.length) {
+    return { canceled: true, added: [], rejected: [] };
+  }
+
   const store = loadLibraryStore();
   const added = [];
-  const rejected = [];
+  const extracted = await extractFilesFromPaths(safePaths);
 
-  for (const filePath of result.filePaths) {
-    try {
-      const parsed = readUploadedFile(filePath);
-      const doc = {
-        id: createDocumentId(),
-        name: parsed.name,
-        path: parsed.path,
-        size: parsed.size,
-        charCount: parsed.charCount,
-        importedAt: new Date().toISOString(),
-        chunks: parsed.chunks
-      };
+  for (const parsed of extracted.files) {
+    const doc = {
+      id: createDocumentId(),
+      name: parsed.name,
+      path: parsed.path,
+      size: parsed.size,
+      charCount: parsed.charCount,
+      importedAt: new Date().toISOString(),
+      chunks: Array.isArray(parsed.chunks) ? parsed.chunks : [String(parsed.content || "")]
+    };
 
-      const existingIndex = store.documents.findIndex((item) => item.path === doc.path);
-      if (existingIndex >= 0) store.documents.splice(existingIndex, 1);
-      store.documents.unshift(doc);
-      added.push(summarizeDocument(doc));
-    } catch (error) {
-      rejected.push({
-        path: filePath,
-        name: path.basename(filePath),
-        error: error.message || String(error)
-      });
-    }
+    const existingIndex = store.documents.findIndex((item) => item.path === doc.path);
+    if (existingIndex >= 0) store.documents.splice(existingIndex, 1);
+    store.documents.unshift(doc);
+    added.push(summarizeDocument(doc));
   }
 
   store.documents = store.documents.slice(0, 500);
@@ -634,7 +655,7 @@ async function importLibraryDocuments() {
   return {
     canceled: false,
     added,
-    rejected
+    rejected: extracted.errors
   };
 }
 
@@ -669,6 +690,38 @@ function searchLibraryDocuments(queryText) {
       return a.chunkIndex - b.chunkIndex;
     })
     .slice(0, query ? 6 : 3);
+}
+
+async function extractFilesFromPaths(filePaths) {
+  const script = extractorScriptPath();
+  if (!fs.existsSync(script)) {
+    throw new Error("The extraction script is missing.");
+  }
+
+  const python = resolvePythonExecutable();
+  const stdin = JSON.stringify({ paths: filePaths || [] });
+
+  const stdout = await new Promise((resolve, reject) => {
+    const child = execFile(python, [script], {
+      windowsHide: true,
+      maxBuffer: 50 * 1024 * 1024
+    }, (error, out, errOut) => {
+      if (error) {
+        reject(new Error(String(errOut || error.message || "Extraction failed.")));
+        return;
+      }
+      resolve(String(out || ""));
+    });
+
+    child.stdin.write(stdin);
+    child.stdin.end();
+  });
+
+  const parsed = JSON.parse(String(stdout || "{}"));
+  return {
+    files: Array.isArray(parsed?.files) ? parsed.files : [],
+    errors: Array.isArray(parsed?.errors) ? parsed.errors : []
+  };
 }
 
 async function saveTextToFile(content, defaultPath = "") {
@@ -800,34 +853,82 @@ async function ollamaListModels() {
   return { base: OLLAMA_BASE_URL, json };
 }
 
-function pickOllamaModelId(modelsJson, prefer = "phi-3.5") {
+function pickOllamaModelId(modelsJson, prefer = "phi-3.5", wantVision = false) {
   const names = (Array.isArray(modelsJson?.models) ? modelsJson.models : [])
     .map((model) => String(model?.name || "").trim())
     .filter(Boolean);
 
+  const pool = wantVision ? names.filter((name) => isVisionModelName(name)) : names;
+  const candidates = pool.length ? pool : names;
+
   const normalizedPrefer = String(prefer || "").toLowerCase().trim();
-  const exact = names.find((name) => name.toLowerCase() === normalizedPrefer);
+  const exact = candidates.find((name) => name.toLowerCase() === normalizedPrefer);
   if (exact) return exact;
 
-  const partial = names.find((name) => name.toLowerCase().includes(normalizedPrefer));
+  const partial = candidates.find((name) => name.toLowerCase().includes(normalizedPrefer));
   if (partial) return partial;
 
-  return pickModelFromNames(names, [/phi/i, /llama/i, /mistral/i, /.*/]);
+  if (wantVision) {
+    return pickModelFromNames(candidates, [/gemma3/i, /llava/i, /vision/i, /.*/]);
+  }
+
+  return pickModelFromNames(candidates, [/phi/i, /llama/i, /mistral/i, /.*/]);
 }
 
-async function ollamaChat(messages) {
+function buildOllamaMessages(messages, media) {
+  const out = messages.map((message) => ({ ...message }));
+  if (!Array.isArray(media) || !media.length) return out;
+
+  const images = [];
+  for (const item of media) {
+    if (item?.mediaKind === "image" && item.imageBase64) {
+      images.push(item.imageBase64);
+    }
+    if (item?.mediaKind === "video" && Array.isArray(item.videoFramesBase64)) {
+      images.push(...item.videoFramesBase64.filter(Boolean));
+    }
+  }
+
+  if (!images.length) return out;
+
+  let targetIndex = -1;
+  for (let index = out.length - 1; index >= 0; index -= 1) {
+    if (out[index]?.role === "user") {
+      targetIndex = index;
+      break;
+    }
+  }
+
+  if (targetIndex < 0) {
+    out.push({ role: "user", content: "Please analyze the attached media.", images });
+    return out;
+  }
+
+  out[targetIndex] = {
+    ...out[targetIndex],
+    images
+  };
+
+  return out;
+}
+
+async function ollamaChat(messages, media = []) {
   const settings = loadSettings();
   const { json } = await ollamaListModels();
-  const model = pickOllamaModelId(json, settings.local_prefer || settings.foundry_prefer);
+  const wantVision = Array.isArray(media) && media.length > 0;
+  const model = pickOllamaModelId(json, settings.local_prefer || settings.foundry_prefer, wantVision);
 
   if (!model) throw new Error("No Ollama models found.");
+  if (wantVision && !isVisionModelName(model)) {
+    throw new Error("No Ollama vision model is available. Install a vision-capable model such as Gemma 3 or LLaVA.");
+  }
 
   const jsonReply = await requestJson(`${OLLAMA_BASE_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model,
-      messages,
+      messages: buildOllamaMessages(messages, media),
       stream: false
     })
   }, "Ollama chat failed");
@@ -968,9 +1069,19 @@ async function localAutoHealth() {
   }
 }
 
-async function localAutoChat(messages) {
+async function localAutoChat(messages, media = []) {
+  if (Array.isArray(media) && media.length) {
+    const reply = await ollamaChat(messages, media);
+    return {
+      provider: "ollama",
+      mode: "local-auto",
+      label: "Local (Auto -> Ollama)",
+      ...reply
+    };
+  }
+
   try {
-    const reply = await ollamaChat(messages);
+    const reply = await ollamaChat(messages, []);
     return {
       provider: "ollama",
       mode: "local-auto",
@@ -1309,6 +1420,16 @@ function wireIPC() {
     return await pickFilesForUpload();
   });
 
+  ipcMain.handle("files:loadPaths", async (event, paths) => {
+    const safePaths = Array.isArray(paths) ? paths.map((item) => String(item || "")).filter(Boolean) : [];
+    const extracted = await extractFilesFromPaths(safePaths);
+    return {
+      canceled: false,
+      files: extracted.files,
+      rejected: extracted.errors
+    };
+  });
+
   ipcMain.handle("files:saveText", async (event, payload) => {
     const content = String(payload?.content || "");
     const defaultPath = String(payload?.defaultPath || "");
@@ -1366,6 +1487,10 @@ function wireIPC() {
     return await importLibraryDocuments();
   });
 
+  ipcMain.handle("library:importPaths", async (event, paths) => {
+    return await importLibraryDocumentsFromPaths(paths);
+  });
+
   ipcMain.handle("library:remove", (event, id) => {
     const targetId = String(id || "").trim();
     const store = loadLibraryStore();
@@ -1379,21 +1504,26 @@ function wireIPC() {
     return searchLibraryDocuments(queryText);
   });
 
-  ipcMain.handle("ai:ask", async (event, messages) => {
-    const safeMessages = normalizeMessages(messages);
+  ipcMain.handle("ai:ask", async (event, payload) => {
+    const input = Array.isArray(payload) ? { messages: payload, media: [] } : (payload || {});
+    const safeMessages = normalizeMessages(input.messages);
+    const media = Array.isArray(input.media) ? input.media : [];
     const settings = loadSettings();
 
     if (settings.provider === "local-auto") {
-      const reply = await localAutoChat(safeMessages);
+      const reply = await localAutoChat(safeMessages, media);
       return reply.text;
     }
 
     if (settings.provider === "ollama") {
-      const reply = await ollamaChat(safeMessages);
+      const reply = await ollamaChat(safeMessages, media);
       return reply.text;
     }
 
     if (settings.provider === "foundry") {
+      if (media.length) {
+        throw new Error("Foundry Local media analysis is not supported in this build. Use Local (Ollama) with a vision model.");
+      }
       const reply = await foundryChat(safeMessages);
       return reply.text;
     }
@@ -1404,6 +1534,10 @@ function wireIPC() {
     const cloudProvider = resolveCloudProvider(settings);
     if (!cloudProvider) {
       throw new Error(settings.last_api_detection_error || "Could not determine which cloud provider to use for this key.");
+    }
+
+    if (media.length) {
+      throw new Error("Cloud media analysis is not wired yet in this build. Use Local (Ollama) with a vision-capable model for images and video frames.");
     }
 
     const reply = await cloudChat(cloudProvider, apiKey, safeMessages, settings.cloud_model);

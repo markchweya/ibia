@@ -596,6 +596,33 @@ body{
   line-height:1.45;
 }
 
+.libraryDropZone{
+  margin-top:12px;
+  padding:16px;
+  border:1.5px dashed rgba(99, 213, 255, 0.32);
+  border-radius:18px;
+  background:rgba(255,255,255,0.03);
+  transition:border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.libraryDropZone.dragging{
+  border-color:rgba(99, 213, 255, 0.72);
+  background:rgba(99, 213, 255, 0.08);
+  transform:translateY(-1px);
+}
+
+.libraryDropZoneTitle{
+  font-size:13px;
+  font-weight:700;
+}
+
+.libraryDropZoneText{
+  margin-top:5px;
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.45;
+}
+
 .libraryList{
   display:flex;
   flex-direction:column;

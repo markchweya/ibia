@@ -24,6 +24,7 @@ const saveKeyBtn = document.getElementById("saveKeyBtn");
 const keyStatus = document.getElementById("keyStatus");
 const settingsHint = document.getElementById("settingsHint");
 const libraryUploadBtn = document.getElementById("libraryUploadBtn");
+const libraryDropZone = document.getElementById("libraryDropZone");
 const libraryList = document.getElementById("libraryList");
 
 const themeBtn = document.getElementById("themeBtn");
@@ -63,6 +64,7 @@ let historyScrollTop = 0;
 let libraryDocs = [];
 let currentHealth = null;
 let persistTimer = null;
+let libraryDragDepth = 0;
 
 function createInitialChatHistory() {
   return [
@@ -352,7 +354,7 @@ function renderFileMemory() {
     <div class="fileChip">
       <div class="fileChipMeta">
         <div class="fileChipName">${escapeHtml(file.name)}</div>
-        <div class="fileChipInfo">${escapeHtml(formatBytes(file.size))}${file.truncated ? " - clipped for preview" : ""}</div>
+        <div class="fileChipInfo">${escapeHtml(formatBytes(file.size))} - ${escapeHtml(String(file.mediaKind || "text"))}${file.truncated ? " - clipped for preview" : ""}</div>
       </div>
       <button class="fileChipRemove" type="button" data-file-index="${index}" aria-label="Remove ${escapeHtml(file.name)}">x</button>
     </div>
@@ -471,6 +473,20 @@ async function loadLibraryList() {
   if (!window.api?.libraryList) return;
   libraryDocs = await window.api.libraryList();
   renderLibraryList();
+}
+
+async function applyLibraryImportResult(result) {
+  if (!result || result.canceled) return;
+
+  if ((result.added || []).length) {
+    showToast(`${result.added.length} library file${result.added.length === 1 ? "" : "s"} added`);
+  }
+
+  for (const rejected of result.rejected || []) {
+    addBubble(`**Could not add ${rejected.name} to the library**\n\n${rejected.error}`, "ai");
+  }
+
+  await loadLibraryList();
 }
 
 function renderLibraryList() {
@@ -666,6 +682,62 @@ async function buildDocumentContext(queryText) {
   };
 }
 
+function buildMediaAttachments() {
+  const mediaFiles = uploadedFiles.filter((file) => file.mediaKind === "image" || file.mediaKind === "video");
+  return mediaFiles.slice(0, 3).map((file) => ({
+    name: file.name,
+    path: file.path,
+    mediaKind: file.mediaKind,
+    mimeType: file.mimeType || "",
+    imageBase64: file.imageBase64 || "",
+    videoFramesBase64: Array.isArray(file.videoFramesBase64) ? file.videoFramesBase64 : []
+  }));
+}
+
+async function importFilesIntoChat(result) {
+  if (!result || result.canceled) return;
+
+  for (const file of result.files || []) {
+    const existing = uploadedFiles.findIndex((item) => item.path === file.path);
+    if (existing >= 0) uploadedFiles.splice(existing, 1);
+    uploadedFiles.unshift(file);
+
+    const details = [
+      `Path: \`${file.path}\``,
+      `Size: ${formatBytes(file.size)}`,
+      `Type: ${file.mediaKind || "text"}`
+    ];
+
+    if (file.mediaKind === "image" && file.width && file.height) {
+      details.push(`Image: ${file.width}x${file.height}`);
+    }
+
+    if (file.mediaKind === "video") {
+      if (file.width && file.height) details.push(`Video: ${file.width}x${file.height}`);
+      if (file.duration) details.push(`Duration: ${file.duration}s`);
+      details.push("Frames extracted for local vision analysis.");
+    }
+
+    if (file.truncated) {
+      details.push("Preview text was clipped, but chunk retrieval will still use the extracted chunks.");
+    }
+
+    addBubble(`Loaded file: **${file.name}**\n\n${details.join("\n")}`, "ai");
+  }
+
+  for (const rejected of result.rejected || []) {
+    addBubble(`**Could not load ${rejected.name}**\n\n${rejected.error}`, "ai");
+  }
+
+  renderFileMemory();
+  scheduleConversationSave();
+
+  const loadedCount = (result.files || []).length;
+  if (loadedCount) {
+    showToast(`${loadedCount} file${loadedCount === 1 ? "" : "s"} added to this chat`);
+  }
+}
+
 async function prepareHistoryForSend(history, latestQuery) {
   const all = Array.isArray(history) ? history : [];
   const systemMessages = [];
@@ -719,7 +791,10 @@ async function sendMessage(text) {
 
   try {
     const payloadHistory = await prepareHistoryForSend(chatHistory, message);
-    const reply = await window.api.ask(payloadHistory);
+    const reply = await window.api.ask({
+      messages: payloadHistory,
+      media: buildMediaAttachments()
+    });
     typing.innerHTML = renderMessage(reply);
     chatHistory.push({ role: "assistant", content: reply });
     lastAssistantReply = reply;
@@ -822,18 +897,7 @@ libraryUploadBtn.addEventListener("click", async () => {
     return;
   }
 
-  const result = await window.api.libraryImport();
-  if (!result || result.canceled) return;
-
-  if ((result.added || []).length) {
-    showToast(`${result.added.length} library file${result.added.length === 1 ? "" : "s"} added`);
-  }
-
-  for (const rejected of result.rejected || []) {
-    addBubble(`**Could not add ${rejected.name} to the library**\n\n${rejected.error}`, "ai");
-  }
-
-  await loadLibraryList();
+  await applyLibraryImportResult(await window.api.libraryImport());
 });
 
 closeBtn.addEventListener("click", async () => window.api.hide());
@@ -875,33 +939,7 @@ uploadBtn.addEventListener("click", async () => {
     return;
   }
 
-  const result = await window.api.pickFiles();
-  if (!result || result.canceled) return;
-
-  for (const file of result.files || []) {
-    const existing = uploadedFiles.findIndex((item) => item.path === file.path);
-    if (existing >= 0) uploadedFiles.splice(existing, 1);
-    uploadedFiles.unshift(file);
-
-    addBubble(
-      `Loaded file: **${file.name}**\n\n` +
-      `Path: \`${file.path}\`\n` +
-      `Size: ${formatBytes(file.size)}${file.truncated ? "\nNote: preview was clipped, but chunk retrieval will still use the imported chunks." : ""}`,
-      "ai"
-    );
-  }
-
-  for (const rejected of result.rejected || []) {
-    addBubble(`**Could not load ${rejected.name}**\n\n${rejected.error}`, "ai");
-  }
-
-  renderFileMemory();
-  scheduleConversationSave();
-
-  const loadedCount = (result.files || []).length;
-  if (loadedCount) {
-    showToast(`${loadedCount} file${loadedCount === 1 ? "" : "s"} added to this chat`);
-  }
+  await importFilesIntoChat(await window.api.pickFiles());
 });
 
 fileMemory.addEventListener("click", (event) => {
@@ -915,6 +953,47 @@ fileMemory.addEventListener("click", (event) => {
   renderFileMemory();
   scheduleConversationSave();
   showToast(`Removed ${removed.name} from this chat`);
+});
+
+function setLibraryDropActive(active) {
+  libraryDropZone.classList.toggle("dragging", active);
+}
+
+libraryDropZone.addEventListener("dragenter", (event) => {
+  event.preventDefault();
+  libraryDragDepth += 1;
+  setLibraryDropActive(true);
+});
+
+libraryDropZone.addEventListener("dragover", (event) => {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "copy";
+  setLibraryDropActive(true);
+});
+
+libraryDropZone.addEventListener("dragleave", (event) => {
+  event.preventDefault();
+  libraryDragDepth = Math.max(0, libraryDragDepth - 1);
+  if (libraryDragDepth === 0) {
+    setLibraryDropActive(false);
+  }
+});
+
+libraryDropZone.addEventListener("drop", async (event) => {
+  event.preventDefault();
+  libraryDragDepth = 0;
+  setLibraryDropActive(false);
+
+  const dropped = Array.from(event.dataTransfer?.files || []);
+  const paths = dropped.map((file) => file.path).filter(Boolean);
+  if (!paths.length) return;
+
+  if (!window.api?.libraryImportPaths) {
+    showToast("Drag and drop is not wired");
+    return;
+  }
+
+  await applyLibraryImportResult(await window.api.libraryImportPaths(paths));
 });
 
 historyList.addEventListener("click", async (event) => {

@@ -1,4 +1,3 @@
-@"
 node_modules/
 dist/
 out/
@@ -7,4 +6,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .env
-"@ | Out-File -Encoding utf8 .gitignore
+__pycache__/
+*.pyc
+.idea/
