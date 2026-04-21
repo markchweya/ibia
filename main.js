@@ -174,19 +174,21 @@ function createTray() {
    Global Shortcut
 ------------------------------ */
 function registerShortcuts() {
-  const primary = "Control+A+I";
-  const fallback = "Control+Shift+I";
+  const shortcuts = [
+    "Control+Alt+I",
+    "Control+Shift+I"
+  ];
 
-  const ok = globalShortcut.register(primary, toggleWindow);
-  if (!ok) console.log("Shortcut failed:", primary);
+  let active = "none";
 
-  const ok2 = globalShortcut.register(fallback, toggleWindow);
-  if (!ok2) console.log("Shortcut failed:", fallback);
-
-  const active =
-    (globalShortcut.isRegistered(primary) ? primary : "") ||
-    (globalShortcut.isRegistered(fallback) ? fallback : "") ||
-    "none";
+  for (const accelerator of shortcuts) {
+    const ok = globalShortcut.register(accelerator, toggleWindow);
+    if (ok) {
+      active = accelerator;
+      break;
+    }
+    console.log("Shortcut failed:", accelerator);
+  }
 
   console.log("Shortcut active:", active);
 }
