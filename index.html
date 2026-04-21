@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>AI Assistant</title>
+  <title>AI Launcher</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="style.css">
 </head>
@@ -11,13 +11,12 @@
     <div class="topbar" id="dragBar">
       <div class="leftBrand">
         <div class="brandText">
-          <div class="brandTitle">AI Assistant</div>
-          <div class="brandSub" id="statusText">Checking…</div>
+          <div class="brandTitle">AI Launcher</div>
+          <div class="brandSub" id="statusText">Checking local providers...</div>
         </div>
       </div>
 
       <div class="rightActions">
-        <!-- Settings (gear icon) -->
         <button class="iconIconBtn" id="settingsBtn" title="Settings" aria-label="Settings">
           <svg viewBox="0 0 24 24" aria-hidden="true" class="gearIcon">
             <path d="M12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"></path>
@@ -25,7 +24,6 @@
           </svg>
         </button>
 
-        <!-- Theme (moon/sun icon) -->
         <button class="iconIconBtn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">
           <svg id="themeIconMoon" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M21 14.5A8.5 8.5 0 0 1 9.5 3a6.5 6.5 0 1 0 11.5 11.5Z"></path>
@@ -54,25 +52,36 @@
 
     <div class="toast" id="toast"></div>
 
-    <!-- Settings panel -->
     <div class="settingsPanel" id="settingsPanel" aria-hidden="true">
       <div class="settingsHeader">
         <div class="settingsTitle">Settings</div>
         <button class="iconBtn small" id="settingsCloseBtn">Close</button>
       </div>
 
-      <div class="settingsRow">
-        <label class="label">Provider</label>
-        <select id="providerSelect" class="select">
-          <option value="foundry">Local (Foundry)</option>
-          <option value="ollama">Local (Ollama)</option>
-          <option value="openai">OpenAI</option>
-        </select>
-      </div>
+      <div class="settingsGrid">
+        <div class="settingsRow">
+          <label class="label" for="providerSelect">Provider / Mode</label>
+          <select id="providerSelect" class="select">
+            <option value="local-auto">Local (Auto)</option>
+            <option value="ollama">Local (Ollama)</option>
+            <option value="foundry">Local (Foundry Local)</option>
+            <option value="auto-api">API Key (Auto Detect)</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Claude (Anthropic)</option>
+            <option value="xai">Grok (xAI)</option>
+            <option value="deepseek">DeepSeek</option>
+          </select>
+        </div>
 
-      <div class="settingsRow">
-        <label class="label">OpenAI API Key</label>
-        <input id="apiKeyInput" class="input" type="password" placeholder="Paste your key here" />
+        <div class="settingsRow">
+          <label class="label" for="apiKeyInput">API Key</label>
+          <input
+            id="apiKeyInput"
+            class="input"
+            type="password"
+            placeholder="Paste an OpenAI, Claude, Grok, or DeepSeek key"
+          />
+        </div>
       </div>
 
       <div class="settingsRow actions">
@@ -80,15 +89,14 @@
         <div class="muted" id="keyStatus">Key: not set</div>
       </div>
 
-      <div class="settingsHint">
-        Your key is saved locally on this PC (userData/settings.json).
+      <div class="settingsHint" id="settingsHint">
+        Local (Auto) tries Ollama first, then Foundry Local. Paste any supported cloud API key and the app will detect the provider for you.
       </div>
     </div>
 
     <div class="content">
       <div class="messages" id="messages"></div>
 
-      <!-- ✅ Sticky bottom: composer + disclaimer together -->
       <div class="composerWrap">
         <div class="composer">
           <input type="file" id="fileInput" hidden multiple accept=".txt,.md,.json" />
@@ -99,11 +107,10 @@
           <button class="sendBtn" id="sendBtn">Send</button>
         </div>
 
-        <div class="disclaimer">AI can make mistakes. Check important info.</div>
+        <div class="disclaimer">Local mode prefers Ollama. Cloud mode auto-detects supported API keys.</div>
       </div>
     </div>
 
-    <!-- Resize handles -->
     <div class="rh r-n"></div>
     <div class="rh r-s"></div>
     <div class="rh r-e"></div>
