@@ -23,6 +23,7 @@ const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_UPLOAD_CHARS = 24000;
 const CHUNK_SIZE = 1800;
 const CHUNK_OVERLAP = 240;
+const EXTRACTION_TIMEOUT_MS = 60000;
 
 const TEXT_FILE_EXTENSIONS = new Set([
   ".c", ".cc", ".conf", ".cpp", ".cs", ".css", ".csv", ".env", ".gitignore",
@@ -568,18 +569,8 @@ function readUploadedFile(filePath) {
 async function pickFilesForUpload() {
   const result = await dialog.showOpenDialog(win, {
     title: "Open files for AI Launcher",
-    properties: ["openFile", "multiSelections"],
-    filters: [
-      {
-        name: "Text and code files",
-        extensions: [
-          "txt", "md", "json", "js", "ts", "tsx", "jsx", "html", "css", "py",
-          "java", "c", "cpp", "cs", "go", "rs", "php", "rb", "yml", "yaml",
-          "xml", "csv", "tsv", "ini", "env", "toml", "sql", "sh", "ps1", "log"
-        ]
-      },
-      { name: "All files", extensions: ["*"] }
-    ]
+    defaultPath: app.getPath("downloads"),
+    properties: ["openFile", "multiSelections"]
   });
 
   if (result.canceled || !result.filePaths.length) {
@@ -598,18 +589,8 @@ async function pickFilesForUpload() {
 async function importLibraryDocuments() {
   const result = await dialog.showOpenDialog(win, {
     title: "Add study files to the library",
-    properties: ["openFile", "multiSelections"],
-    filters: [
-      {
-        name: "Text and code files",
-        extensions: [
-          "txt", "md", "json", "js", "ts", "tsx", "jsx", "html", "css", "py",
-          "java", "c", "cpp", "cs", "go", "rs", "php", "rb", "yml", "yaml",
-          "xml", "csv", "tsv", "ini", "env", "toml", "sql", "sh", "ps1", "log"
-        ]
-      },
-      { name: "All files", extensions: ["*"] }
-    ]
+    defaultPath: app.getPath("downloads"),
+    properties: ["openFile", "multiSelections"]
   });
 
   if (result.canceled || !result.filePaths.length) {
@@ -698,30 +679,77 @@ async function extractFilesFromPaths(filePaths) {
     throw new Error("The extraction script is missing.");
   }
 
-  const python = resolvePythonExecutable();
-  const stdin = JSON.stringify({ paths: filePaths || [] });
+  const safePaths = Array.isArray(filePaths)
+    ? filePaths.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
 
-  const stdout = await new Promise((resolve, reject) => {
-    const child = execFile(python, [script], {
-      windowsHide: true,
-      maxBuffer: 50 * 1024 * 1024
-    }, (error, out, errOut) => {
-      if (error) {
-        reject(new Error(String(errOut || error.message || "Extraction failed.")));
-        return;
-      }
-      resolve(String(out || ""));
+  const combined = {
+    files: [],
+    errors: []
+  };
+
+  for (const filePath of safePaths) {
+    const result = await extractSingleFileFromPath(script, filePath);
+    combined.files.push(...result.files);
+    combined.errors.push(...result.errors);
+  }
+
+  return combined;
+}
+
+async function extractSingleFileFromPath(script, filePath) {
+  const python = resolvePythonExecutable();
+
+  try {
+    const stdout = await new Promise((resolve, reject) => {
+      const child = execFile(python, ["-X", "utf8", script, filePath], {
+        windowsHide: true,
+        maxBuffer: 50 * 1024 * 1024,
+        timeout: EXTRACTION_TIMEOUT_MS,
+        env: {
+          ...process.env,
+          PYTHONUTF8: "1"
+        }
+      }, (error, out, errOut) => {
+        if (error) {
+          reject(new Error(String(errOut || error.message || "Extraction failed.")));
+          return;
+        }
+        resolve(String(out || ""));
+      });
     });
 
-    child.stdin.write(stdin);
-    child.stdin.end();
-  });
+    const parsed = JSON.parse(String(stdout || "{}"));
+    return {
+      files: Array.isArray(parsed?.files) ? parsed.files : [],
+      errors: Array.isArray(parsed?.errors) ? parsed.errors : []
+    };
+  } catch (error) {
+    return {
+      files: [],
+      errors: [
+        {
+          path: filePath,
+          name: path.basename(filePath),
+          error: describeExtractionError(error)
+        }
+      ]
+    };
+  }
+}
 
-  const parsed = JSON.parse(String(stdout || "{}"));
-  return {
-    files: Array.isArray(parsed?.files) ? parsed.files : [],
-    errors: Array.isArray(parsed?.errors) ? parsed.errors : []
-  };
+function describeExtractionError(error) {
+  const message = String(error?.message || error || "Extraction failed.");
+
+  if (/timed out|SIGTERM|killed/i.test(message)) {
+    return "This file took too long to process. Try a smaller export, split it into parts, or add a lighter version.";
+  }
+
+  if (/maxBuffer/i.test(message)) {
+    return "This file produced too much extracted content in one pass. Try splitting it into smaller files.";
+  }
+
+  return message;
 }
 
 async function saveTextToFile(content, defaultPath = "") {

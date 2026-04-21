@@ -897,7 +897,12 @@ libraryUploadBtn.addEventListener("click", async () => {
     return;
   }
 
-  await applyLibraryImportResult(await window.api.libraryImport());
+  try {
+    await applyLibraryImportResult(await window.api.libraryImport());
+  } catch (error) {
+    showToast("Could not add those files", 2200);
+    addBubble(`**Library upload failed**\n\n${String(error?.message || error || "Unknown error")}`, "ai");
+  }
 });
 
 closeBtn.addEventListener("click", async () => window.api.hide());
@@ -939,7 +944,12 @@ uploadBtn.addEventListener("click", async () => {
     return;
   }
 
-  await importFilesIntoChat(await window.api.pickFiles());
+  try {
+    await importFilesIntoChat(await window.api.pickFiles());
+  } catch (error) {
+    showToast("Could not upload those files", 2200);
+    addBubble(`**Upload failed**\n\n${String(error?.message || error || "Unknown error")}`, "ai");
+  }
 });
 
 fileMemory.addEventListener("click", (event) => {
@@ -993,7 +1003,12 @@ libraryDropZone.addEventListener("drop", async (event) => {
     return;
   }
 
-  await applyLibraryImportResult(await window.api.libraryImportPaths(paths));
+  try {
+    await applyLibraryImportResult(await window.api.libraryImportPaths(paths));
+  } catch (error) {
+    showToast("Could not add those dropped files", 2200);
+    addBubble(`**Library drop failed**\n\n${String(error?.message || error || "Unknown error")}`, "ai");
+  }
 });
 
 historyList.addEventListener("click", async (event) => {

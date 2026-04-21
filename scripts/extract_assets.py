@@ -256,9 +256,13 @@ def make_payload(path_str: str):
 
 def main():
     try:
-        raw = sys.stdin.read().lstrip("\ufeff").strip()
-        data = json.loads(raw or "{}")
-        paths = data.get("paths") or []
+        if len(sys.argv) > 1:
+            paths = sys.argv[1:]
+        else:
+            raw = sys.stdin.read().lstrip("\ufeff").strip()
+            data = json.loads(raw or "{}")
+            paths = data.get("paths") or []
+
         out = {"files": [], "errors": []}
 
         for path_str in paths:
