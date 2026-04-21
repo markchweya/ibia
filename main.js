@@ -8,6 +8,7 @@ const execFileAsync = promisify(execFile);
 const {
   app,
   BrowserWindow,
+  dialog,
   globalShortcut,
   ipcMain,
   screen,
@@ -18,6 +19,17 @@ const {
 
 const OLLAMA_BASE_URL = "http://127.0.0.1:11434";
 const ANTHROPIC_VERSION = "2023-06-01";
+const MAX_UPLOAD_CHARS = 24000;
+const CHUNK_SIZE = 1800;
+const CHUNK_OVERLAP = 240;
+
+const TEXT_FILE_EXTENSIONS = new Set([
+  ".c", ".cc", ".conf", ".cpp", ".cs", ".css", ".csv", ".env", ".gitignore",
+  ".go", ".html", ".htm", ".ini", ".java", ".js", ".json", ".jsx", ".log",
+  ".md", ".mjs", ".ps1", ".psd1", ".psm1", ".php", ".py", ".rb", ".rs", ".sh",
+  ".sql", ".svg", ".toml", ".ts", ".tsx", ".txt", ".xml", ".yaml", ".yml",
+  ".bat", ".cmd", ".tsx", ".vue"
+]);
 
 const LOCAL_PROVIDER_IDS = new Set(["local-auto", "ollama", "foundry"]);
 
@@ -198,6 +210,14 @@ function settingsPath() {
   return path.join(app.getPath("userData"), "settings.json");
 }
 
+function historyPath() {
+  return path.join(app.getPath("userData"), "chat-history.json");
+}
+
+function libraryPath() {
+  return path.join(app.getPath("userData"), "document-library.json");
+}
+
 function loadSettings() {
   try {
     const p = settingsPath();
@@ -241,6 +261,155 @@ function saveSettings(partial) {
   const merged = { ...current, ...partial };
   fs.writeFileSync(settingsPath(), JSON.stringify(merged, null, 2), "utf-8");
   return merged;
+}
+
+function loadConversationStore() {
+  try {
+    const p = historyPath();
+    if (!fs.existsSync(p)) {
+      return { conversations: [] };
+    }
+
+    const raw = fs.readFileSync(p, "utf-8");
+    const data = JSON.parse(raw);
+    return {
+      conversations: Array.isArray(data?.conversations) ? data.conversations : []
+    };
+  } catch {
+    return { conversations: [] };
+  }
+}
+
+function saveConversationStore(store) {
+  fs.writeFileSync(historyPath(), JSON.stringify(store, null, 2), "utf-8");
+  return store;
+}
+
+function loadLibraryStore() {
+  try {
+    const p = libraryPath();
+    if (!fs.existsSync(p)) {
+      return { documents: [] };
+    }
+
+    const raw = fs.readFileSync(p, "utf-8");
+    const data = JSON.parse(raw);
+    return {
+      documents: Array.isArray(data?.documents) ? data.documents : []
+    };
+  } catch {
+    return { documents: [] };
+  }
+}
+
+function saveLibraryStore(store) {
+  fs.writeFileSync(libraryPath(), JSON.stringify(store, null, 2), "utf-8");
+  return store;
+}
+
+function createConversationId() {
+  return `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createDocumentId() {
+  return `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function summarizeConversation(conversation) {
+  const messages = Array.isArray(conversation?.messages) ? conversation.messages : [];
+  const uploadedFiles = Array.isArray(conversation?.uploadedFiles) ? conversation.uploadedFiles : [];
+  const lastContent = [...messages]
+    .reverse()
+    .find((message) => message?.role !== "system" && String(message?.content || "").trim())
+    ?.content || "";
+
+  return {
+    id: conversation.id,
+    title: conversation.title || "Untitled chat",
+    updatedAt: conversation.updatedAt || conversation.createdAt || new Date().toISOString(),
+    createdAt: conversation.createdAt || conversation.updatedAt || new Date().toISOString(),
+    messageCount: messages.filter((message) => message?.role !== "system").length,
+    fileCount: uploadedFiles.length,
+    preview: String(lastContent).slice(0, 140)
+  };
+}
+
+function summarizeDocument(document) {
+  return {
+    id: document.id,
+    name: document.name,
+    path: document.path,
+    size: document.size,
+    charCount: document.charCount,
+    chunkCount: Array.isArray(document.chunks) ? document.chunks.length : 0,
+    importedAt: document.importedAt || document.updatedAt || new Date().toISOString()
+  };
+}
+
+function sanitizeConversationPayload(payload = {}) {
+  const now = new Date().toISOString();
+  const messages = Array.isArray(payload.messages) ? payload.messages : [];
+  const uploadedFiles = Array.isArray(payload.uploadedFiles) ? payload.uploadedFiles : [];
+
+  return {
+    id: String(payload.id || createConversationId()),
+    title: String(payload.title || "Untitled chat").trim() || "Untitled chat",
+    createdAt: payload.createdAt || now,
+    updatedAt: now,
+    messages: messages.map((message) => ({
+      role: message?.role === "assistant" ? "assistant" : message?.role === "system" ? "system" : "user",
+      content: String(message?.content || "")
+    })),
+    uploadedFiles: uploadedFiles.map((file) => ({
+      name: String(file?.name || ""),
+      path: String(file?.path || ""),
+      size: Number(file?.size || 0),
+      content: String(file?.content || ""),
+      chunks: Array.isArray(file?.chunks) ? file.chunks.map((chunk) => String(chunk || "")) : [],
+      truncated: !!file?.truncated,
+      charCount: Number(file?.charCount || String(file?.content || "").length)
+    })),
+    lastAssistantReply: String(payload.lastAssistantReply || "")
+  };
+}
+
+function chunkText(text, chunkSize = CHUNK_SIZE, overlap = CHUNK_OVERLAP) {
+  const source = String(text || "");
+  if (!source) return [];
+
+  const chunks = [];
+  let start = 0;
+
+  while (start < source.length) {
+    const end = Math.min(source.length, start + chunkSize);
+    chunks.push(source.slice(start, end));
+    if (end >= source.length) break;
+    start = Math.max(end - overlap, start + 1);
+  }
+
+  return chunks;
+}
+
+function tokenizeSearchText(text) {
+  return [...new Set(
+    String(text || "")
+      .toLowerCase()
+      .match(/[a-z0-9_./-]{2,}/g) || []
+  )];
+}
+
+function scoreTextAgainstTokens(text, tokens) {
+  if (!tokens.length) return 0;
+  const haystack = String(text || "").toLowerCase();
+  let score = 0;
+
+  for (const token of tokens) {
+    if (!haystack.includes(token)) continue;
+    score += 2;
+    if (haystack.startsWith(token)) score += 1;
+  }
+
+  return score;
 }
 
 function providerLabel(provider) {
@@ -324,6 +493,200 @@ function pickModelFromNames(names, preferredPatterns = []) {
   }
 
   return items[0];
+}
+
+function isLikelyTextFile(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (TEXT_FILE_EXTENSIONS.has(ext)) return true;
+
+  const base = path.basename(filePath).toLowerCase();
+  return base === "readme" || base === "license" || base === ".env";
+}
+
+function readUploadedFile(filePath) {
+  const stat = fs.statSync(filePath);
+
+  if (!stat.isFile()) {
+    throw new Error("Only files can be uploaded.");
+  }
+
+  if (!isLikelyTextFile(filePath)) {
+    throw new Error("This file does not look like a supported text/code document.");
+  }
+
+  const raw = fs.readFileSync(filePath, "utf-8");
+
+  if (raw.includes("\u0000")) {
+    throw new Error("Binary files are not supported yet.");
+  }
+
+  const content = raw.length > MAX_UPLOAD_CHARS ? raw.slice(0, MAX_UPLOAD_CHARS) : raw;
+  const chunks = chunkText(raw);
+
+  return {
+    name: path.basename(filePath),
+    path: filePath,
+    size: stat.size,
+    content,
+    chunks,
+    truncated: raw.length > MAX_UPLOAD_CHARS,
+    charCount: raw.length
+  };
+}
+
+async function pickFilesForUpload() {
+  const result = await dialog.showOpenDialog(win, {
+    title: "Open files for AI Launcher",
+    properties: ["openFile", "multiSelections"],
+    filters: [
+      {
+        name: "Text and code files",
+        extensions: [
+          "txt", "md", "json", "js", "ts", "tsx", "jsx", "html", "css", "py",
+          "java", "c", "cpp", "cs", "go", "rs", "php", "rb", "yml", "yaml",
+          "xml", "csv", "tsv", "ini", "env", "toml", "sql", "sh", "ps1", "log"
+        ]
+      },
+      { name: "All files", extensions: ["*"] }
+    ]
+  });
+
+  if (result.canceled || !result.filePaths.length) {
+    return { canceled: true, files: [], rejected: [] };
+  }
+
+  const files = [];
+  const rejected = [];
+
+  for (const filePath of result.filePaths) {
+    try {
+      files.push(readUploadedFile(filePath));
+    } catch (error) {
+      rejected.push({
+        path: filePath,
+        name: path.basename(filePath),
+        error: error.message || String(error)
+      });
+    }
+  }
+
+  return {
+    canceled: false,
+    files,
+    rejected
+  };
+}
+
+async function importLibraryDocuments() {
+  const result = await dialog.showOpenDialog(win, {
+    title: "Add study files to the library",
+    properties: ["openFile", "multiSelections"],
+    filters: [
+      {
+        name: "Text and code files",
+        extensions: [
+          "txt", "md", "json", "js", "ts", "tsx", "jsx", "html", "css", "py",
+          "java", "c", "cpp", "cs", "go", "rs", "php", "rb", "yml", "yaml",
+          "xml", "csv", "tsv", "ini", "env", "toml", "sql", "sh", "ps1", "log"
+        ]
+      },
+      { name: "All files", extensions: ["*"] }
+    ]
+  });
+
+  if (result.canceled || !result.filePaths.length) {
+    return { canceled: true, added: [], rejected: [] };
+  }
+
+  const store = loadLibraryStore();
+  const added = [];
+  const rejected = [];
+
+  for (const filePath of result.filePaths) {
+    try {
+      const parsed = readUploadedFile(filePath);
+      const doc = {
+        id: createDocumentId(),
+        name: parsed.name,
+        path: parsed.path,
+        size: parsed.size,
+        charCount: parsed.charCount,
+        importedAt: new Date().toISOString(),
+        chunks: parsed.chunks
+      };
+
+      const existingIndex = store.documents.findIndex((item) => item.path === doc.path);
+      if (existingIndex >= 0) store.documents.splice(existingIndex, 1);
+      store.documents.unshift(doc);
+      added.push(summarizeDocument(doc));
+    } catch (error) {
+      rejected.push({
+        path: filePath,
+        name: path.basename(filePath),
+        error: error.message || String(error)
+      });
+    }
+  }
+
+  store.documents = store.documents.slice(0, 500);
+  saveLibraryStore(store);
+
+  return {
+    canceled: false,
+    added,
+    rejected
+  };
+}
+
+function searchLibraryDocuments(queryText) {
+  const store = loadLibraryStore();
+  const query = String(queryText || "").trim();
+  const tokens = tokenizeSearchText(query);
+  const results = [];
+
+  for (const document of store.documents) {
+    const docScore = scoreTextAgainstTokens(`${document.name} ${document.path}`, tokens);
+    const chunks = Array.isArray(document.chunks) ? document.chunks : [];
+
+    chunks.forEach((chunk, index) => {
+      const score = docScore + scoreTextAgainstTokens(chunk, tokens);
+      if (!score && query) return;
+
+      results.push({
+        id: document.id,
+        name: document.name,
+        path: document.path,
+        chunkIndex: index,
+        score,
+        excerpt: chunk
+      });
+    });
+  }
+
+  return results
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.chunkIndex - b.chunkIndex;
+    })
+    .slice(0, query ? 6 : 3);
+}
+
+async function saveTextToFile(content, defaultPath = "") {
+  const result = await dialog.showSaveDialog(win, {
+    title: "Save AI output",
+    defaultPath: defaultPath || "ai-launcher-output.txt",
+    filters: [
+      { name: "Text files", extensions: ["txt", "md"] },
+      { name: "All files", extensions: ["*"] }
+    ]
+  });
+
+  if (result.canceled || !result.filePath) {
+    return { canceled: true };
+  }
+
+  fs.writeFileSync(result.filePath, String(content || ""), "utf-8");
+  return { canceled: false, path: result.filePath };
 }
 
 function createWindow() {
@@ -940,6 +1303,80 @@ function wireIPC() {
 
   ipcMain.handle("ai:health", async () => {
     return await getHealthStatus();
+  });
+
+  ipcMain.handle("files:pick", async () => {
+    return await pickFilesForUpload();
+  });
+
+  ipcMain.handle("files:saveText", async (event, payload) => {
+    const content = String(payload?.content || "");
+    const defaultPath = String(payload?.defaultPath || "");
+    return await saveTextToFile(content, defaultPath);
+  });
+
+  ipcMain.handle("history:list", () => {
+    const store = loadConversationStore();
+    return store.conversations
+      .map(summarizeConversation)
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  });
+
+  ipcMain.handle("history:get", (event, id) => {
+    const targetId = String(id || "").trim();
+    const store = loadConversationStore();
+    return store.conversations.find((conversation) => conversation.id === targetId) || null;
+  });
+
+  ipcMain.handle("history:create", (event, payload) => {
+    const store = loadConversationStore();
+    const conversation = sanitizeConversationPayload(payload);
+    store.conversations = [conversation, ...store.conversations.filter((item) => item.id !== conversation.id)];
+    saveConversationStore(store);
+    return conversation;
+  });
+
+  ipcMain.handle("history:save", (event, payload) => {
+    const store = loadConversationStore();
+    const conversation = sanitizeConversationPayload(payload);
+    const next = store.conversations.filter((item) => item.id !== conversation.id);
+    next.unshift(conversation);
+    store.conversations = next.slice(0, 100);
+    saveConversationStore(store);
+    return summarizeConversation(conversation);
+  });
+
+  ipcMain.handle("history:delete", (event, id) => {
+    const targetId = String(id || "").trim();
+    const store = loadConversationStore();
+    const before = store.conversations.length;
+    store.conversations = store.conversations.filter((conversation) => conversation.id !== targetId);
+    saveConversationStore(store);
+    return { ok: store.conversations.length !== before };
+  });
+
+  ipcMain.handle("library:list", () => {
+    const store = loadLibraryStore();
+    return store.documents
+      .map(summarizeDocument)
+      .sort((a, b) => String(b.importedAt).localeCompare(String(a.importedAt)));
+  });
+
+  ipcMain.handle("library:import", async () => {
+    return await importLibraryDocuments();
+  });
+
+  ipcMain.handle("library:remove", (event, id) => {
+    const targetId = String(id || "").trim();
+    const store = loadLibraryStore();
+    const before = store.documents.length;
+    store.documents = store.documents.filter((document) => document.id !== targetId);
+    saveLibraryStore(store);
+    return { ok: store.documents.length !== before };
+  });
+
+  ipcMain.handle("library:search", (event, queryText) => {
+    return searchLibraryDocuments(queryText);
   });
 
   ipcMain.handle("ai:ask", async (event, messages) => {

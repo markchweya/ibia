@@ -10,6 +10,10 @@
   <div class="app" id="app">
     <div class="topbar" id="dragBar">
       <div class="leftBrand">
+        <div class="brandLogo" aria-hidden="true">
+          <div class="brandLogoCore"></div>
+          <div class="brandLogoOrbit"></div>
+        </div>
         <div class="brandText">
           <div class="brandTitle">AI Launcher</div>
           <div class="brandSub" id="statusText">Checking local providers...</div>
@@ -17,6 +21,14 @@
       </div>
 
       <div class="rightActions">
+        <button class="iconIconBtn" id="historyBtn" title="History" aria-label="History">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="historyIcon">
+            <path d="M12 8v5l3 2"></path>
+            <path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"></path>
+            <path d="M4 4v4h4"></path>
+          </svg>
+        </button>
+
         <button class="iconIconBtn" id="settingsBtn" title="Settings" aria-label="Settings">
           <svg viewBox="0 0 24 24" aria-hidden="true" class="gearIcon">
             <path d="M12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"></path>
@@ -51,6 +63,21 @@
     </div>
 
     <div class="toast" id="toast"></div>
+
+    <div class="historyPanel" id="historyPanel" aria-hidden="true">
+      <div class="historyHeader">
+        <div>
+          <div class="historyTitle">History</div>
+          <div class="historySub">Reopen and continue previous chats.</div>
+        </div>
+        <div class="historyActions">
+          <button class="iconBtn small" id="newChatBtn">New chat</button>
+          <button class="iconBtn small" id="historyCloseBtn">Close</button>
+        </div>
+      </div>
+
+      <div class="historyList" id="historyList"></div>
+    </div>
 
     <div class="settingsPanel" id="settingsPanel" aria-hidden="true">
       <div class="settingsHeader">
@@ -92,15 +119,28 @@
       <div class="settingsHint" id="settingsHint">
         Local (Auto) tries Ollama first, then Foundry Local. Paste any supported cloud API key and the app will detect the provider for you.
       </div>
+
+      <div class="settingsLibrary">
+        <div class="settingsLibraryHeader">
+          <div>
+            <div class="settingsTitle">Study Library</div>
+            <div class="settingsLibrarySub">Add many notes, code files, or revision documents and let the AI search them by relevance.</div>
+          </div>
+          <button class="primaryBtn" id="libraryUploadBtn">Add files</button>
+        </div>
+
+        <div class="libraryList" id="libraryList"></div>
+      </div>
     </div>
 
     <div class="content">
       <div class="messages" id="messages"></div>
+      <div class="fileMemory" id="fileMemory" hidden></div>
 
       <div class="composerWrap">
         <div class="composer">
-          <input type="file" id="fileInput" hidden multiple accept=".txt,.md,.json" />
           <button class="pillBtn" id="uploadBtn" title="Upload" aria-label="Upload">+</button>
+          <button class="pillBtn secondary" id="saveReplyBtn" title="Save last AI reply" aria-label="Save last AI reply">Save</button>
 
           <textarea id="input" rows="1" placeholder="Ask anything..."></textarea>
 

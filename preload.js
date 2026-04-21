@@ -17,6 +17,17 @@ contextBridge.exposeInMainWorld("api", {
   settingsSetApiKey: (key) => ipcRenderer.invoke("settings:setApiKey", key),
   settingsSetOpenAIKey: (key) => ipcRenderer.invoke("settings:setApiKey", key),
   settingsSetFoundryPrefer: (value) => ipcRenderer.invoke("settings:setFoundryPrefer", value),
+  pickFiles: () => ipcRenderer.invoke("files:pick"),
+  saveTextFile: (payload) => ipcRenderer.invoke("files:saveText", payload),
+  historyList: () => ipcRenderer.invoke("history:list"),
+  historyGet: (id) => ipcRenderer.invoke("history:get", id),
+  historyCreate: (payload) => ipcRenderer.invoke("history:create", payload),
+  historySave: (payload) => ipcRenderer.invoke("history:save", payload),
+  historyDelete: (id) => ipcRenderer.invoke("history:delete", id),
+  libraryList: () => ipcRenderer.invoke("library:list"),
+  libraryImport: () => ipcRenderer.invoke("library:import"),
+  libraryRemove: (id) => ipcRenderer.invoke("library:remove", id),
+  librarySearch: (queryText) => ipcRenderer.invoke("library:search", queryText),
 
   onShown: (callback) => ipcRenderer.on("win:shown", () => callback && callback()),
   onState: (callback) => ipcRenderer.on("win:state", (event, data) => callback && callback(data))
