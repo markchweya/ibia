@@ -24,6 +24,7 @@ const MAX_UPLOAD_CHARS = 24000;
 const CHUNK_SIZE = 1800;
 const CHUNK_OVERLAP = 240;
 const EXTRACTION_TIMEOUT_MS = 60000;
+const LOCAL_SPEED_MODES = new Set(["fast", "balanced", "deep"]);
 
 const TEXT_FILE_EXTENSIONS = new Set([
   ".c", ".cc", ".conf", ".cpp", ".cs", ".css", ".csv", ".env", ".gitignore",
@@ -239,6 +240,7 @@ function loadSettings() {
       api_key: data.api_key || data.openai_api_key || "",
       detected_api_provider: data.detected_api_provider || "",
       cloud_model: data.cloud_model || "",
+      local_speed_mode: LOCAL_SPEED_MODES.has(data.local_speed_mode) ? data.local_speed_mode : "fast",
       local_prefer: data.local_prefer || data.foundry_prefer || "phi-3.5",
       foundry_prefer: data.foundry_prefer || data.local_prefer || "phi-3.5",
       openai_api_key: data.openai_api_key || "",
@@ -255,6 +257,7 @@ function defaultSettings() {
     api_key: "",
     detected_api_provider: "",
     cloud_model: "",
+    local_speed_mode: "fast",
     local_prefer: "phi-3.5",
     foundry_prefer: "phi-3.5",
     openai_api_key: "",
@@ -438,6 +441,32 @@ function scoreTextAgainstTokens(text, tokens) {
   }
 
   return score;
+}
+
+function getLocalSpeedMode(settings = loadSettings()) {
+  const mode = String(settings?.local_speed_mode || "").trim().toLowerCase();
+  return LOCAL_SPEED_MODES.has(mode) ? mode : "fast";
+}
+
+function getOllamaRuntimeOptions(speedMode) {
+  if (speedMode === "deep") {
+    return {
+      num_ctx: 8192,
+      num_predict: 900
+    };
+  }
+
+  if (speedMode === "balanced") {
+    return {
+      num_ctx: 6144,
+      num_predict: 650
+    };
+  }
+
+  return {
+    num_ctx: 4096,
+    num_predict: 420
+  };
 }
 
 function providerLabel(provider) {
@@ -640,19 +669,25 @@ async function importLibraryDocumentsFromPaths(filePaths) {
   };
 }
 
-function searchLibraryDocuments(queryText) {
+function searchLibraryDocuments(payload) {
   const store = loadLibraryStore();
-  const query = String(queryText || "").trim();
+  const query = typeof payload === "string"
+    ? String(payload || "").trim()
+    : String(payload?.queryText || "").trim();
+  const limit = Math.max(1, Math.min(12, Number(payload?.limit || (query ? 6 : 3))));
+  const perDocumentLimit = Math.max(1, Math.min(4, Number(payload?.perDocumentLimit || 2)));
   const tokens = tokenizeSearchText(query);
   const results = [];
 
   for (const document of store.documents) {
     const docScore = scoreTextAgainstTokens(`${document.name} ${document.path}`, tokens);
     const chunks = Array.isArray(document.chunks) ? document.chunks : [];
+    let hitsForDocument = 0;
 
     chunks.forEach((chunk, index) => {
       const score = docScore + scoreTextAgainstTokens(chunk, tokens);
       if (!score && query) return;
+      if (hitsForDocument >= perDocumentLimit) return;
 
       results.push({
         id: document.id,
@@ -662,6 +697,7 @@ function searchLibraryDocuments(queryText) {
         score,
         excerpt: chunk
       });
+      hitsForDocument += 1;
     });
   }
 
@@ -670,7 +706,7 @@ function searchLibraryDocuments(queryText) {
       if (b.score !== a.score) return b.score - a.score;
       return a.chunkIndex - b.chunkIndex;
     })
-    .slice(0, query ? 6 : 3);
+    .slice(0, limit);
 }
 
 async function extractFilesFromPaths(filePaths) {
@@ -881,7 +917,7 @@ async function ollamaListModels() {
   return { base: OLLAMA_BASE_URL, json };
 }
 
-function pickOllamaModelId(modelsJson, prefer = "phi-3.5", wantVision = false) {
+function pickOllamaModelId(modelsJson, prefer = "phi-3.5", wantVision = false, speedMode = "fast") {
   const names = (Array.isArray(modelsJson?.models) ? modelsJson.models : [])
     .map((model) => String(model?.name || "").trim())
     .filter(Boolean);
@@ -900,7 +936,15 @@ function pickOllamaModelId(modelsJson, prefer = "phi-3.5", wantVision = false) {
     return pickModelFromNames(candidates, [/gemma3/i, /llava/i, /vision/i, /.*/]);
   }
 
-  return pickModelFromNames(candidates, [/phi/i, /llama/i, /mistral/i, /.*/]);
+  if (speedMode === "deep") {
+    return pickModelFromNames(candidates, [/14b/i, /8b/i, /7b/i, /qwen/i, /llama/i, /mistral/i, /.*/]);
+  }
+
+  if (speedMode === "balanced") {
+    return pickModelFromNames(candidates, [/7b/i, /8b/i, /3b/i, /phi/i, /llama/i, /mistral/i, /.*/]);
+  }
+
+  return pickModelFromNames(candidates, [/3b/i, /1\.5b/i, /mini/i, /phi/i, /llama3\.2:3b/i, /qwen/i, /.*/]);
 }
 
 function buildOllamaMessages(messages, media) {
@@ -942,9 +986,11 @@ function buildOllamaMessages(messages, media) {
 
 async function ollamaChat(messages, media = []) {
   const settings = loadSettings();
+  const speedMode = getLocalSpeedMode(settings);
   const { json } = await ollamaListModels();
   const wantVision = Array.isArray(media) && media.length > 0;
-  const model = pickOllamaModelId(json, settings.local_prefer || settings.foundry_prefer, wantVision);
+  const model = pickOllamaModelId(json, settings.local_prefer || settings.foundry_prefer, wantVision, speedMode);
+  const runtimeOptions = getOllamaRuntimeOptions(speedMode);
 
   if (!model) throw new Error("No Ollama models found.");
   if (wantVision && !isVisionModelName(model)) {
@@ -957,7 +1003,8 @@ async function ollamaChat(messages, media = []) {
     body: JSON.stringify({
       model,
       messages: buildOllamaMessages(messages, media),
-      stream: false
+      stream: false,
+      options: runtimeOptions
     })
   }, "Ollama chat failed");
 
@@ -1395,6 +1442,7 @@ function wireIPC() {
       detectedProvider: settings.detected_api_provider || "",
       detectedProviderLabel: providerLabel(settings.detected_api_provider),
       cloudModel: settings.cloud_model || "",
+      localSpeedMode: getLocalSpeedMode(settings),
       foundryPrefer: settings.local_prefer || settings.foundry_prefer || "phi-3.5"
     };
   });
@@ -1435,6 +1483,19 @@ function wireIPC() {
     saveSettings({
       local_prefer: value,
       foundry_prefer: value
+    });
+
+    return { ok: true };
+  });
+
+  ipcMain.handle("settings:setLocalSpeedMode", (event, mode) => {
+    const value = String(mode || "").trim().toLowerCase();
+    if (!LOCAL_SPEED_MODES.has(value)) {
+      return { ok: false, error: "Invalid speed mode" };
+    }
+
+    saveSettings({
+      local_speed_mode: value
     });
 
     return { ok: true };

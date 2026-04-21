@@ -19,6 +19,7 @@ const settingsBtn = document.getElementById("settingsBtn");
 const settingsPanel = document.getElementById("settingsPanel");
 const settingsCloseBtn = document.getElementById("settingsCloseBtn");
 const providerSelect = document.getElementById("providerSelect");
+const speedModeSelect = document.getElementById("speedModeSelect");
 const apiKeyInput = document.getElementById("apiKeyInput");
 const saveKeyBtn = document.getElementById("saveKeyBtn");
 const keyStatus = document.getElementById("keyStatus");
@@ -36,10 +37,32 @@ const saveReplyBtn = document.getElementById("saveReplyBtn");
 const fileMemory = document.getElementById("fileMemory");
 
 const DEFAULT_SYSTEM_PROMPT = "You are a helpful desktop assistant. Be friendly, practical, and concise.";
-const MAX_CONTEXT_CHARS = 7200;
-const MAX_MSG_CHARS = 1200;
-const KEEP_LAST_MESSAGES = 10;
-const MAX_FILE_EXCERPT_CHARS = 1500;
+const SPEED_PROFILES = {
+  fast: {
+    contextChars: 3800,
+    messageChars: 700,
+    keepLastMessages: 6,
+    excerptChars: 850,
+    uploadedMatchLimit: 2,
+    libraryMatchLimit: 3
+  },
+  balanced: {
+    contextChars: 7200,
+    messageChars: 1200,
+    keepLastMessages: 10,
+    excerptChars: 1500,
+    uploadedMatchLimit: 4,
+    libraryMatchLimit: 6
+  },
+  deep: {
+    contextChars: 9800,
+    messageChars: 1600,
+    keepLastMessages: 12,
+    excerptChars: 1900,
+    uploadedMatchLimit: 6,
+    libraryMatchLimit: 8
+  }
+};
 
 const PROVIDER_LABELS = {
   "local-auto": "Local (Auto)",
@@ -65,6 +88,8 @@ let libraryDocs = [];
 let currentHealth = null;
 let persistTimer = null;
 let libraryDragDepth = 0;
+let currentLocalSpeedMode = "fast";
+const librarySearchCache = new Map();
 
 function createInitialChatHistory() {
   return [
@@ -271,6 +296,12 @@ function providerLabel(provider) {
   return PROVIDER_LABELS[provider] || provider || "Unknown";
 }
 
+function speedModeLabel(mode) {
+  if (mode === "deep") return "Deep";
+  if (mode === "balanced") return "Balanced";
+  return "Fast";
+}
+
 function formatDateLabel(iso) {
   if (!iso) return "";
   try {
@@ -288,6 +319,14 @@ function formatDateLabel(iso) {
 function clipText(text, max) {
   const value = String(text || "");
   return value.length > max ? `${value.slice(0, max)}... [clipped]` : value;
+}
+
+function getSpeedProfile() {
+  return SPEED_PROFILES[currentLocalSpeedMode] || SPEED_PROFILES.fast;
+}
+
+function clearLibrarySearchCache() {
+  librarySearchCache.clear();
 }
 
 function tokenizeSearchText(text) {
@@ -364,6 +403,7 @@ function renderFileMemory() {
 function findRelevantUploadedChunks(queryText) {
   if (!uploadedFiles.length) return [];
 
+  const profile = getSpeedProfile();
   const query = String(queryText || "").trim();
   const queryTokens = tokenizeSearchText(query);
   const matches = [];
@@ -381,7 +421,7 @@ function findRelevantUploadedChunks(queryText) {
         path: file.path,
         chunkIndex: index,
         score,
-        excerpt: clipText(chunk, MAX_FILE_EXCERPT_CHARS)
+        excerpt: clipText(chunk, profile.excerptChars)
       });
     });
   }
@@ -391,7 +431,7 @@ function findRelevantUploadedChunks(queryText) {
       if (b.score !== a.score) return b.score - a.score;
       return a.chunkIndex - b.chunkIndex;
     })
-    .slice(0, 4);
+    .slice(0, profile.uploadedMatchLimit);
 }
 
 function deriveConversationTitle(messages, files) {
@@ -472,6 +512,7 @@ function renderHistoryList() {
 async function loadLibraryList() {
   if (!window.api?.libraryList) return;
   libraryDocs = await window.api.libraryList();
+  clearLibrarySearchCache();
   renderLibraryList();
 }
 
@@ -605,22 +646,24 @@ async function deleteConversation(id) {
 }
 
 function updateKeyStatus(settings) {
+  const speedText = ` Local speed is set to ${speedModeLabel(settings.localSpeedMode || currentLocalSpeedMode)} mode.`;
+
   if (!settings.apiKeySet) {
     keyStatus.textContent = "Key: not set";
-    settingsHint.textContent = "Local (Auto) tries Ollama first, then Foundry Local. Paste any supported cloud API key and the app will detect the provider for you.";
+    settingsHint.textContent = "Local (Auto) tries Ollama first, then Foundry Local. Paste any supported cloud API key and the app will detect the provider for you." + speedText;
     return;
   }
 
   if (settings.detectedProvider) {
     keyStatus.textContent = `Key: set - ${providerLabel(settings.detectedProvider)}`;
     settingsHint.textContent = settings.cloudModel
-      ? `Detected ${providerLabel(settings.detectedProvider)} and saved model ${settings.cloudModel}.`
-      : `Detected ${providerLabel(settings.detectedProvider)} for this key.`;
+      ? `Detected ${providerLabel(settings.detectedProvider)} and saved model ${settings.cloudModel}.` + speedText
+      : `Detected ${providerLabel(settings.detectedProvider)} for this key.` + speedText;
     return;
   }
 
   keyStatus.textContent = "Key: saved";
-  settingsHint.textContent = "The key is stored locally on this PC. If detection fails, switch to the exact provider and try saving again.";
+  settingsHint.textContent = "The key is stored locally on this PC. If detection fails, switch to the exact provider and try saving again." + speedText;
 }
 
 async function loadSettingsUI() {
@@ -631,6 +674,8 @@ async function loadSettingsUI() {
 
   const settings = await window.api.settingsGet();
   providerSelect.value = settings.provider || "local-auto";
+  currentLocalSpeedMode = settings.localSpeedMode || "fast";
+  speedModeSelect.value = currentLocalSpeedMode;
   updateKeyStatus(settings);
 }
 
@@ -649,8 +694,18 @@ async function refreshHealth() {
 }
 
 async function buildDocumentContext(queryText) {
+  const profile = getSpeedProfile();
   const uploadedMatches = findRelevantUploadedChunks(queryText);
-  const libraryMatches = window.api?.librarySearch ? await window.api.librarySearch(queryText) : [];
+  const cacheKey = `${currentLocalSpeedMode}::${String(queryText || "").trim().toLowerCase()}::${libraryDocs.length}`;
+  let libraryMatches = librarySearchCache.get(cacheKey);
+  if (!libraryMatches && window.api?.librarySearch) {
+    libraryMatches = await window.api.librarySearch({
+      queryText,
+      limit: profile.libraryMatchLimit,
+      perDocumentLimit: currentLocalSpeedMode === "deep" ? 3 : 2
+    });
+    librarySearchCache.set(cacheKey, libraryMatches);
+  }
   const sections = [];
 
   if (uploadedMatches.length) {
@@ -666,7 +721,7 @@ async function buildDocumentContext(queryText) {
     sections.push(
       "Study library matches:\n" +
       libraryMatches.map((match) =>
-        `FILE: ${match.name}\nPATH: ${match.path}\nEXCERPT:\n${clipText(match.excerpt, MAX_FILE_EXCERPT_CHARS)}`
+        `FILE: ${match.name}\nPATH: ${match.path}\nEXCERPT:\n${clipText(match.excerpt, profile.excerptChars)}`
       ).join("\n---\n")
     );
   }
@@ -740,10 +795,11 @@ async function importFilesIntoChat(result) {
 
 async function prepareHistoryForSend(history, latestQuery) {
   const all = Array.isArray(history) ? history : [];
+  const profile = getSpeedProfile();
   const systemMessages = [];
 
   if (all[0]?.role === "system") {
-    systemMessages.push({ ...all[0], content: clipText(all[0].content, 420) });
+    systemMessages.push({ ...all[0], content: clipText(all[0].content, currentLocalSpeedMode === "fast" ? 320 : 420) });
   }
 
   const documentContext = await buildDocumentContext(latestQuery);
@@ -752,21 +808,21 @@ async function prepareHistoryForSend(history, latestQuery) {
   }
 
   const tail = all.slice(all[0]?.role === "system" ? 1 : 0);
-  const recent = tail.slice(Math.max(0, tail.length - KEEP_LAST_MESSAGES)).map((message) => ({
+  const recent = tail.slice(Math.max(0, tail.length - profile.keepLastMessages)).map((message) => ({
     role: message.role,
-    content: clipText(message.content, MAX_MSG_CHARS)
+    content: clipText(message.content, profile.messageChars)
   }));
 
   const out = [...systemMessages, ...recent];
   const totalChars = () => out.reduce((sum, message) => sum + String(message.content || "").length, 0);
 
-  while (out.length > systemMessages.length + 1 && totalChars() > MAX_CONTEXT_CHARS) {
+  while (out.length > systemMessages.length + 1 && totalChars() > profile.contextChars) {
     out.splice(systemMessages.length, 1);
   }
 
-  if (totalChars() > MAX_CONTEXT_CHARS && out.length) {
+  if (totalChars() > profile.contextChars && out.length) {
     const last = out[out.length - 1];
-    last.content = clipText(last.content, Math.max(280, MAX_CONTEXT_CHARS - 320));
+    last.content = clipText(last.content, Math.max(280, profile.contextChars - 320));
   }
 
   return out;
@@ -862,6 +918,25 @@ providerSelect.addEventListener("change", async () => {
   }
 
   showToast("Provider updated");
+  await loadSettingsUI();
+  await refreshHealth();
+});
+
+speedModeSelect.addEventListener("change", async () => {
+  if (!window.api?.settingsSetLocalSpeedMode) {
+    showToast("Settings API not wired");
+    return;
+  }
+
+  const result = await window.api.settingsSetLocalSpeedMode(speedModeSelect.value);
+  if (!result?.ok) {
+    showToast(result?.error || "Could not update speed mode");
+    return;
+  }
+
+  currentLocalSpeedMode = speedModeSelect.value;
+  clearLibrarySearchCache();
+  showToast(`Local mode: ${speedModeLabel(currentLocalSpeedMode)}`);
   await loadSettingsUI();
   await refreshHealth();
 });
