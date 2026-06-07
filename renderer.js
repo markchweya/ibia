@@ -285,6 +285,49 @@ function addBubble(text, kind) {
   return div;
 }
 
+function userMessageFromError(error) {
+  let message = String(error?.message || error || "Something went wrong.").trim();
+
+  message = message
+    .replace(/^Error invoking remote method '[^']+':\s*/i, "")
+    .replace(/^Error:\s*/i, "")
+    .trim();
+
+  if (/api key is invalid|invalid api key|incorrect api key|unauthorized|forbidden|401|403/i.test(message)) {
+    return "API key is invalid.";
+  }
+
+  if (/api key not set|api key is missing|empty key/i.test(message)) {
+    return "API key is missing.";
+  }
+
+  if (/ollama/i.test(message) && /fetch failed|ECONNREFUSED|not running|connect/i.test(message)) {
+    return "Ollama is not running.";
+  }
+
+  if (/no ollama models found/i.test(message)) {
+    return "No Ollama models found.";
+  }
+
+  if (/foundry local.*not installed|foundry local cli was not found|foundry.*not found/i.test(message)) {
+    return "Foundry Local is not installed.";
+  }
+
+  if (/foundry local.*not running|foundry.*not running/i.test(message)) {
+    return "Foundry Local is not running.";
+  }
+
+  if (/no foundry local models found/i.test(message)) {
+    return "No Foundry Local models found.";
+  }
+
+  if (/no local provider|no local ai provider/i.test(message)) {
+    return "No local AI provider is available. Start Ollama or Foundry Local.";
+  }
+
+  return message || "Something went wrong.";
+}
+
 function formatBytes(bytes) {
   const value = Number(bytes || 0);
   if (value < 1024) return `${value} B`;
@@ -573,7 +616,7 @@ function closeSettings() {
 }
 
 function greet() {
-  addBubble("Hello. Local mode uses Ollama first, then Foundry Local. The study library can hold many text/code files, and the AI will pull the most relevant chunks into each answer.", "ai");
+  addBubble("Hello. I can use Ollama locally, Foundry Local, or a saved API key. Add files when you want me to search your notes or code.", "ai");
 }
 
 function renderChatHistory() {
@@ -860,9 +903,10 @@ async function sendMessage(text) {
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
   } catch (error) {
-    const textValue = `**Error**\n\n${error.message || error}`;
+    const friendlyError = userMessageFromError(error);
+    const textValue = `**Could not answer**\n\n${friendlyError}`;
     typing.innerHTML = renderMessage(textValue);
-    showToast("AI error");
+    showToast(friendlyError);
   } finally {
     busy = false;
     if (queue.length) setTimeout(() => sendMessage(queue.shift()), 120);

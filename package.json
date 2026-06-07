@@ -1,8 +1,8 @@
 {
-  "name": "ai-launcher",
+  "name": "ibia",
   "version": "1.0.0",
   "main": "main.js",
-  "description": "A lightweight system-wide launcher with a floating chat UI and pluggable AI providers.",
+  "description": "A lightweight desktop AI assistant with local and cloud model support.",
   "author": "Mark Chweya",
   "scripts": {
     "start": "npx electron .",
@@ -16,8 +16,8 @@
     "electron-builder": "^24.13.3"
   },
   "build": {
-    "appId": "com.markchweya.ailauncher",
-    "productName": "AI Launcher",
+    "appId": "com.markchweya.ibia",
+    "productName": "ibia",
     "directories": {
       "output": "dist"
     },

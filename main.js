@@ -523,12 +523,71 @@ async function requestJson(url, options = {}, errorLabel = "Request failed") {
   const response = await fetch(url, options);
 
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("API key is invalid.");
+    }
+
     const text = await response.text().catch(() => "");
     const details = text || response.statusText || `HTTP ${response.status}`;
     throw new Error(`${errorLabel}: ${details}`);
   }
 
   return await response.json();
+}
+
+function cleanErrorMessage(error) {
+  let message = String(error?.message || error || "Something went wrong.").trim();
+
+  message = message
+    .replace(/^Error invoking remote method '[^']+':\s*/i, "")
+    .replace(/^Error:\s*/i, "")
+    .trim();
+
+  if (/api key is invalid|invalid api key|incorrect api key|unauthorized|forbidden|401|403/i.test(message)) {
+    return "API key is invalid.";
+  }
+
+  if (/api key not set|empty key/i.test(message)) {
+    return "API key is missing.";
+  }
+
+  if (/ollama/i.test(message) && /fetch failed|ECONNREFUSED|not running|connect/i.test(message)) {
+    return "Ollama is not running.";
+  }
+
+  if (/no ollama models found/i.test(message)) {
+    return "No Ollama models found.";
+  }
+
+  if (/foundry local cli was not found|foundry.*not found/i.test(message)) {
+    return "Foundry Local is not installed.";
+  }
+
+  if (/foundry local service is not running|foundry.*not running/i.test(message)) {
+    return "Foundry Local is not running.";
+  }
+
+  if (/no foundry local models found/i.test(message)) {
+    return "No Foundry Local models found.";
+  }
+
+  if (/no local provider is available|no local ai provider/i.test(message)) {
+    return "No local AI provider is available. Start Ollama or Foundry Local.";
+  }
+
+  return message || "Something went wrong.";
+}
+
+function localAutoErrorMessage(ollamaError, foundryError) {
+  const ollama = cleanErrorMessage(ollamaError);
+  const foundry = cleanErrorMessage(foundryError);
+  const messages = [...new Set([ollama, foundry].filter(Boolean))];
+
+  if (!messages.length) {
+    return "No local AI provider is available. Start Ollama or Foundry Local.";
+  }
+
+  return messages.join(" ");
 }
 
 function pickModelFromObjects(list, key, preferredPatterns) {
@@ -597,7 +656,7 @@ function readUploadedFile(filePath) {
 
 async function pickFilesForUpload() {
   const result = await dialog.showOpenDialog(win, {
-    title: "Open files for AI Launcher",
+    title: "Open files for ibia",
     defaultPath: app.getPath("downloads"),
     properties: ["openFile", "multiSelections"]
   });
@@ -791,7 +850,7 @@ function describeExtractionError(error) {
 async function saveTextToFile(content, defaultPath = "") {
   const result = await dialog.showSaveDialog(win, {
     title: "Save AI output",
-    defaultPath: defaultPath || "ai-launcher-output.txt",
+    defaultPath: defaultPath || "ibia-output.txt",
     filters: [
       { name: "Text files", extensions: ["txt", "md"] },
       { name: "All files", extensions: ["*"] }
@@ -810,6 +869,7 @@ function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
   win = new BrowserWindow({
+    title: "ibia",
     width: 540,
     height: 690,
     x: Math.max(20, width - 580),
@@ -877,7 +937,7 @@ function createTray() {
   }
 
   tray = new Tray(icon);
-  tray.setToolTip("AI Launcher");
+  tray.setToolTip("ibia");
 
   const menu = Menu.buildFromTemplate([
     { label: "Show / Hide", click: () => toggleWindow() },
@@ -913,8 +973,12 @@ function registerShortcuts() {
 }
 
 async function ollamaListModels() {
-  const json = await requestJson(`${OLLAMA_BASE_URL}/api/tags`, {}, "Ollama models request failed");
-  return { base: OLLAMA_BASE_URL, json };
+  try {
+    const json = await requestJson(`${OLLAMA_BASE_URL}/api/tags`, {}, "Ollama models request failed");
+    return { base: OLLAMA_BASE_URL, json };
+  } catch (error) {
+    throw new Error(cleanErrorMessage(error));
+  }
 }
 
 function pickOllamaModelId(modelsJson, prefer = "phi-3.5", wantVision = false, speedMode = "fast") {
@@ -1020,11 +1084,11 @@ async function runFoundry(args) {
     return String(stdout || stderr || "").trim();
   } catch (error) {
     if (error?.code === "ENOENT") {
-      throw new Error("Foundry Local CLI was not found. Install Microsoft Foundry Local or switch to Local (Ollama).");
+      throw new Error("Foundry Local is not installed.");
     }
 
     const details = String(error?.stdout || error?.stderr || error?.message || "").trim();
-    throw new Error(details || "Foundry Local command failed.");
+    throw new Error(cleanErrorMessage(details || "Foundry Local command failed."));
   }
 }
 
@@ -1049,7 +1113,7 @@ async function getFoundryV1Base() {
   }
 
   if (/not running/i.test(status)) {
-    throw new Error("Foundry Local service is not running. Start it with `foundry service start` or use Local (Ollama).");
+    throw new Error("Foundry Local is not running.");
   }
 
   const match = status.match(/https?:\/\/127\.0\.0\.1:(\d+)/i);
@@ -1138,7 +1202,7 @@ async function localAutoHealth() {
         ok: false,
         label: providerLabel("local-auto"),
         model: "",
-        error: `Ollama: ${ollamaError.message} | Foundry Local: ${foundryError.message}`
+        error: localAutoErrorMessage(ollamaError, foundryError)
       };
     }
   }
@@ -1173,7 +1237,7 @@ async function localAutoChat(messages, media = []) {
         ...reply
       };
     } catch (foundryError) {
-      throw new Error(`No local provider is available. Ollama: ${ollamaError.message} | Foundry Local: ${foundryError.message}`);
+      throw new Error(localAutoErrorMessage(ollamaError, foundryError));
     }
   }
 }
@@ -1210,7 +1274,7 @@ async function detectCloudProvider(apiKey) {
     }
   }
 
-  throw new Error(lastError?.message || "Could not detect the provider for this API key.");
+  throw new Error(cleanErrorMessage(lastError) || "API key is invalid.");
 }
 
 function resolveCloudProvider(settings) {
@@ -1283,7 +1347,7 @@ async function getHealthStatus() {
         ok: false,
         label: providerLabel("ollama"),
         model: "",
-        error: error.message
+        error: cleanErrorMessage(error)
       };
     }
   }
@@ -1306,7 +1370,7 @@ async function getHealthStatus() {
         ok: false,
         label: providerLabel("foundry"),
         model: "",
-        error: error.message
+        error: cleanErrorMessage(error)
       };
     }
   }
@@ -1332,7 +1396,7 @@ async function getHealthStatus() {
       ok: false,
       label: providerLabel(settings.provider || "auto-api"),
       model: "",
-      error: settings.last_api_detection_error || "API key provider has not been detected yet."
+      error: cleanErrorMessage(settings.last_api_detection_error || "API key provider has not been detected yet.")
     };
   }
 
@@ -1380,12 +1444,12 @@ async function saveApiKeyWithDetection(key) {
       openai_api_key: "",
       detected_api_provider: "",
       cloud_model: "",
-      last_api_detection_error: error.message || String(error)
+      last_api_detection_error: cleanErrorMessage(error)
     });
 
     return {
       ok: false,
-      error: error.message || String(error)
+      error: cleanErrorMessage(error)
     };
   }
 }
@@ -1594,43 +1658,47 @@ function wireIPC() {
   });
 
   ipcMain.handle("ai:ask", async (event, payload) => {
-    const input = Array.isArray(payload) ? { messages: payload, media: [] } : (payload || {});
-    const safeMessages = normalizeMessages(input.messages);
-    const media = Array.isArray(input.media) ? input.media : [];
-    const settings = loadSettings();
+    try {
+      const input = Array.isArray(payload) ? { messages: payload, media: [] } : (payload || {});
+      const safeMessages = normalizeMessages(input.messages);
+      const media = Array.isArray(input.media) ? input.media : [];
+      const settings = loadSettings();
 
-    if (settings.provider === "local-auto") {
-      const reply = await localAutoChat(safeMessages, media);
-      return reply.text;
-    }
-
-    if (settings.provider === "ollama") {
-      const reply = await ollamaChat(safeMessages, media);
-      return reply.text;
-    }
-
-    if (settings.provider === "foundry") {
-      if (media.length) {
-        throw new Error("Foundry Local media analysis is not supported in this build. Use Local (Ollama) with a vision model.");
+      if (settings.provider === "local-auto") {
+        const reply = await localAutoChat(safeMessages, media);
+        return reply.text;
       }
-      const reply = await foundryChat(safeMessages);
+
+      if (settings.provider === "ollama") {
+        const reply = await ollamaChat(safeMessages, media);
+        return reply.text;
+      }
+
+      if (settings.provider === "foundry") {
+        if (media.length) {
+          throw new Error("Foundry Local cannot read images or videos yet. Use Ollama with a vision model.");
+        }
+        const reply = await foundryChat(safeMessages);
+        return reply.text;
+      }
+
+      const apiKey = String(settings.api_key || "").trim();
+      if (!apiKey) throw new Error("API key is missing.");
+
+      const cloudProvider = resolveCloudProvider(settings);
+      if (!cloudProvider) {
+        throw new Error(settings.last_api_detection_error || "API key is invalid.");
+      }
+
+      if (media.length) {
+        throw new Error("Cloud media analysis is not available yet. Use Ollama with a vision model.");
+      }
+
+      const reply = await cloudChat(cloudProvider, apiKey, safeMessages, settings.cloud_model);
       return reply.text;
+    } catch (error) {
+      throw new Error(cleanErrorMessage(error));
     }
-
-    const apiKey = String(settings.api_key || "").trim();
-    if (!apiKey) throw new Error("API key not set.");
-
-    const cloudProvider = resolveCloudProvider(settings);
-    if (!cloudProvider) {
-      throw new Error(settings.last_api_detection_error || "Could not determine which cloud provider to use for this key.");
-    }
-
-    if (media.length) {
-      throw new Error("Cloud media analysis is not wired yet in this build. Use Local (Ollama) with a vision-capable model for images and video frames.");
-    }
-
-    const reply = await cloudChat(cloudProvider, apiKey, safeMessages, settings.cloud_model);
-    return reply.text;
   });
 }
 

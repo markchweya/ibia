@@ -1,6 +1,6 @@
-# AI Launcher (Windows)
+# ibia (Windows)
 
-AI Launcher is a lightweight, system-wide desktop launcher for Windows that opens a floating chat window from a global keyboard shortcut. It’s designed for **fast, offline/local AI** first — using **Microsoft Phi-3.5-mini** as the default local model — with an optional fallback to the **OpenAI API** when you add an API key in Settings.
+ibia is a lightweight, system-wide desktop AI assistant for Windows that opens a floating chat window from a global keyboard shortcut. It’s designed for **fast, offline/local AI** first — using **Microsoft Phi-3.5-mini** as the default local model — with optional cloud providers when you add an API key in Settings.
 
 ---
 
@@ -73,7 +73,7 @@ Use this if your current build is connected to the official Microsoft Phi setup 
 
 1. Install/prepare Phi-3.5-mini using your Microsoft method (weights/runtime)
 2. Confirm the model is available locally (path or runtime service is working)
-3. In **AI Launcher → Settings**:
+3. In **ibia → Settings**:
 
    * Select **Local (Phi-3.5-mini)**
    * Point the app to the **model path** (if your build requires a path), or confirm it can reach the local runtime
@@ -86,7 +86,7 @@ If your build can use Ollama and Phi-3.5-mini through it:
 
 1. Install and run Ollama
 2. Pull a Phi-3.5-mini model (name may vary depending on what’s available in your Ollama registry)
-3. AI Launcher will detect the local model if your implementation includes model discovery
+3. ibia will detect the local model if your implementation includes model discovery
 
 Example (model tag may differ):
 
