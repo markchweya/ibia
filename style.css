@@ -1,20 +1,22 @@
 :root{
-  --bg: rgba(9, 13, 24, 0.96);
-  --bg2: rgba(16, 24, 40, 0.92);
-  --panel: rgba(15, 21, 35, 0.9);
-  --panel2: rgba(21, 31, 52, 0.94);
-  --text: #edf3ff;
-  --muted: rgba(214, 225, 245, 0.66);
-  --stroke: rgba(148, 163, 184, 0.2);
+  --bg: rgba(8, 12, 20, 0.985);
+  --bg2: rgba(12, 18, 30, 0.96);
+  --panel: rgba(15, 22, 34, 0.94);
+  --panel2: rgba(18, 27, 43, 0.96);
+  --text: #f4f7ff;
+  --muted: rgba(221, 228, 241, 0.62);
+  --stroke: rgba(155, 172, 200, 0.16);
   --shadow: rgba(0, 0, 0, 0.45);
 
-  --accent: #63d5ff;
-  --accent-2: #7ff0cb;
-  --accent-soft: rgba(99, 213, 255, 0.15);
-  --accent-strong: rgba(99, 213, 255, 0.24);
+  --accent: #6f8cff;
+  --accent-2: #8a5cff;
+  --accent-soft: rgba(111, 140, 255, 0.14);
+  --accent-strong: rgba(111, 140, 255, 0.3);
 
-  --ai: linear-gradient(180deg, rgba(99, 213, 255, 0.18), rgba(41, 121, 255, 0.1));
-  --you: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+  --ai: rgba(255, 255, 255, 0.055);
+  --you: rgba(111, 140, 255, 0.12);
+  --error: rgba(255, 255, 255, 0.045);
+  --error-stroke: rgba(255, 120, 120, 0.22);
 
   --btn: rgba(255, 255, 255, 0.06);
   --btn-hover: rgba(255, 255, 255, 0.12);
@@ -66,11 +68,13 @@ body{
   flex-direction:column;
   height:100vh;
   overflow:hidden;
-  border-radius:24px;
-  background:linear-gradient(180deg, var(--bg), var(--bg2));
+  border-radius:28px;
+  background:
+    linear-gradient(180deg, var(--bg), var(--bg2)),
+    radial-gradient(circle at 12% 0%, rgba(111, 140, 255, 0.12), transparent 34%);
   border:1px solid var(--stroke);
-  box-shadow:0 30px 90px var(--shadow);
-  backdrop-filter:blur(28px) saturate(125%);
+  box-shadow:0 34px 100px rgba(0, 0, 0, 0.5);
+  backdrop-filter:blur(30px) saturate(120%);
   transform:scale(0.985);
   opacity:0;
   filter:blur(8px);
@@ -79,12 +83,11 @@ body{
 .app::before{
   content:"";
   position:absolute;
-  inset:-22%;
+  inset:-18%;
   pointer-events:none;
   background:
-    radial-gradient(circle at 18% 18%, rgba(127, 240, 203, 0.18), transparent 28%),
-    radial-gradient(circle at 82% 8%, rgba(99, 213, 255, 0.2), transparent 26%),
-    radial-gradient(circle at 50% 100%, rgba(52, 120, 255, 0.14), transparent 30%);
+    radial-gradient(circle at 18% 8%, rgba(111, 140, 255, 0.12), transparent 28%),
+    radial-gradient(circle at 88% 0%, rgba(138, 92, 255, 0.1), transparent 24%);
 }
 
 .app > *{
@@ -112,65 +115,68 @@ body{
   display:flex;
   align-items:center;
   justify-content:space-between;
-  padding:14px 14px 12px;
-  background:linear-gradient(180deg, rgba(255,255,255,0.06), transparent);
-  border-bottom:1px solid rgba(255,255,255,0.05);
+  min-height:72px;
+  padding:14px 16px;
+  background:rgba(255,255,255,0.018);
+  border-bottom:1px solid rgba(255,255,255,0.04);
   -webkit-app-region:drag;
 }
 
 .leftBrand{
   display:flex;
   align-items:center;
-  gap:12px;
+  gap:14px;
   min-width:0;
+  flex:1;
 }
 
 .brandLogo{
   position:relative;
-  width:34px;
-  height:34px;
+  width:78px;
+  height:42px;
   flex:0 0 auto;
-  border-radius:14px;
-  background:linear-gradient(180deg, rgba(99, 213, 255, 0.22), rgba(127, 240, 203, 0.14));
-  border:1px solid rgba(99, 213, 255, 0.24);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.18);
+  border-radius:0;
+  background:transparent;
+  border:none;
+  box-shadow:none;
 }
 
-.brandLogoCore{
+.brandLogoDot{
   position:absolute;
-  inset:9px;
+  top:3px;
+  left:0;
+  width:11px;
+  height:11px;
   border-radius:999px;
-  background:radial-gradient(circle at 35% 35%, #ffffff, #8de4ff 45%, #39a5ff 100%);
-  box-shadow:0 0 18px rgba(99, 213, 255, 0.28);
+  background:linear-gradient(140deg, #74a6ff, #5b6cff 58%, #8a5cff);
+  box-shadow:0 8px 20px rgba(91, 108, 255, 0.28);
 }
 
-.brandLogoOrbit{
+.brandLogoText{
   position:absolute;
-  inset:5px;
-  border-radius:999px;
-  border:2px solid rgba(255,255,255,0.46);
-  border-left-color:transparent;
-  border-bottom-color:rgba(127, 240, 203, 0.4);
-  transform:rotate(-18deg);
-}
-
-.brandText{
+  left:0;
+  bottom:2px;
   display:flex;
-  flex-direction:column;
-  gap:3px;
-  min-width:0;
+  align-items:flex-end;
+  gap:2px;
+  color:var(--text);
+  font-size:29px;
+  font-weight:900;
+  line-height:0.85;
+  letter-spacing:0;
 }
 
-.brandTitle{
-  font-size:15px;
-  font-weight:800;
-  letter-spacing:0.18px;
+.brandLogoText span:first-child,
+.brandLogoText span:nth-child(3){
+  font-weight:850;
 }
 
 .brandSub{
-  max-width:280px;
+  max-width:230px;
+  min-width:0;
   color:var(--muted);
-  font-size:12px;
+  font-size:12.5px;
+  font-weight:650;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
@@ -179,7 +185,8 @@ body{
 .rightActions{
   display:flex;
   align-items:center;
-  gap:10px;
+  gap:7px;
+  flex:0 0 auto;
   -webkit-app-region:no-drag;
 }
 
@@ -231,13 +238,13 @@ body{
 
 .iconIconBtn{
   position:relative;
-  width:44px;
+  width:40px;
   height:38px;
   display:grid;
   place-items:center;
   padding:0;
   border:1px solid var(--stroke);
-  border-radius:14px;
+  border-radius:15px;
   background:var(--btn);
   cursor:pointer;
 }
@@ -270,16 +277,16 @@ body{
 
 .winControls{
   display:flex;
-  gap:8px;
+  gap:6px;
 }
 
 .wcBtn{
-  width:34px;
-  height:34px;
+  width:31px;
+  height:31px;
   display:grid;
   place-items:center;
   border:1px solid var(--stroke);
-  border-radius:14px;
+  border-radius:13px;
   background:rgba(255,255,255,0.03);
   cursor:pointer;
 }
@@ -671,7 +678,7 @@ body{
   flex-direction:column;
   min-height:0;
   overflow:hidden;
-  padding:10px 12px 12px;
+  padding:8px 16px 14px;
   -webkit-app-region:no-drag;
 }
 
@@ -689,12 +696,37 @@ body{
   display:flex;
   flex:1;
   flex-direction:column;
-  gap:12px;
+  gap:14px;
   min-height:0;
   width:100%;
-  padding:10px 2px 14px;
+  padding:20px 6px 18px;
   overflow-y:auto;
   -webkit-app-region:no-drag;
+}
+
+.emptyState{
+  display:grid;
+  place-items:center;
+  align-content:center;
+  gap:8px;
+  flex:1;
+  min-height:240px;
+  color:var(--muted);
+  text-align:center;
+  pointer-events:none;
+}
+
+.emptyStateTitle{
+  color:var(--text);
+  font-size:18px;
+  font-weight:820;
+  letter-spacing:0;
+}
+
+.emptyStateText{
+  max-width:310px;
+  font-size:13px;
+  line-height:1.45;
 }
 
 .fileMemory{
@@ -752,14 +784,14 @@ body{
 }
 
 .msg{
-  max-width:92%;
+  max-width:min(84%, 620px);
   margin:0;
-  padding:14px 15px;
+  padding:13px 15px;
   border:1px solid var(--stroke);
-  border-radius:20px;
-  box-shadow:0 10px 26px rgba(0,0,0,0.08);
-  line-height:1.62;
-  font-size:14.5px;
+  border-radius:18px;
+  box-shadow:none;
+  line-height:1.55;
+  font-size:14px;
   word-break:break-word;
 }
 
@@ -771,6 +803,34 @@ body{
 .msg.you{
   margin-left:auto;
   background:var(--you);
+  border-color:rgba(111, 140, 255, 0.18);
+  border-bottom-right-radius:9px;
+}
+
+.msg.ai:not(.errorMsg){
+  border-bottom-left-radius:9px;
+}
+
+.msg.errorMsg{
+  max-width:min(78%, 460px);
+  background:var(--error);
+  border-color:var(--error-stroke);
+}
+
+.msg.errorMsg strong:first-child{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color:#fff;
+}
+
+.msg.errorMsg strong:first-child::before{
+  content:"";
+  width:8px;
+  height:8px;
+  border-radius:999px;
+  background:#ff7a7a;
+  box-shadow:0 0 0 4px rgba(255, 122, 122, 0.12);
 }
 
 .msg > *:first-child{
@@ -885,23 +945,28 @@ body[data-theme="light"] .codeBlock{
   display:flex;
   flex:0 0 auto;
   flex-direction:column;
-  gap:8px;
+  gap:9px;
   width:100%;
   -webkit-app-region:no-drag;
 }
 
 .composer{
   display:flex;
-  gap:10px;
+  align-items:flex-end;
+  gap:8px;
   width:100%;
-  padding:12px;
-  border:1px solid var(--stroke);
-  border-radius:22px;
-  background:linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
+  padding:10px;
+  border:1px solid rgba(155, 172, 200, 0.2);
+  border-radius:24px;
+  background:rgba(255,255,255,0.055);
+  box-shadow:0 18px 50px rgba(0, 0, 0, 0.18);
 }
 
 .pillBtn{
-  padding:10px 12px;
+  width:44px;
+  min-width:44px;
+  height:44px;
+  padding:0;
   border:1px solid var(--stroke);
   border-radius:16px;
   background:var(--btn);
@@ -912,23 +977,35 @@ body[data-theme="light"] .codeBlock{
 }
 
 .pillBtn.secondary{
+  width:auto;
+  min-width:68px;
+  padding:0 14px;
   font-size:13px;
   font-weight:700;
 }
 
 #input{
-  min-height:46px;
+  min-height:44px;
   max-height:180px;
-  padding:11px 12px;
+  padding:11px 14px;
   resize:none;
   overflow-y:auto;
   font-size:14px;
+  border-radius:17px;
+  background:rgba(8, 13, 24, 0.82);
+}
+
+.sendBtn{
+  min-height:44px;
+  padding:0 17px;
+  border-radius:17px;
+  background:linear-gradient(135deg, rgba(111, 140, 255, 0.38), rgba(49, 93, 255, 0.24));
 }
 
 .disclaimer{
   text-align:center;
   color:var(--muted);
-  font-size:12px;
+  font-size:11.5px;
 }
 
 .messages::-webkit-scrollbar,

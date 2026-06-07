@@ -274,7 +274,8 @@ function isNearBottom(element, threshold = 140) {
 function addBubble(text, kind) {
   const stick = isNearBottom(messagesDiv);
   const div = document.createElement("div");
-  div.className = `msg ${kind}`;
+  const isError = /\*\*(Could not answer|Could not add|Could not load|Library upload failed|Upload failed|Library drop failed)\*\*/i.test(String(text || ""));
+  div.className = `msg ${kind}${isError ? " errorMsg" : ""}`;
   div.innerHTML = renderMessage(text);
   messagesDiv.appendChild(div);
 
@@ -616,7 +617,13 @@ function closeSettings() {
 }
 
 function greet() {
-  addBubble("Hello. I can use Ollama locally, Foundry Local, or a saved API key. Add files when you want me to search your notes or code.", "ai");
+  const div = document.createElement("div");
+  div.className = "emptyState";
+  div.innerHTML = `
+    <div class="emptyStateTitle">What do you want to work on?</div>
+    <div class="emptyStateText">Ask a question, rewrite text, or add files for context.</div>
+  `;
+  messagesDiv.appendChild(div);
 }
 
 function renderChatHistory() {
@@ -725,14 +732,14 @@ async function loadSettingsUI() {
 async function refreshHealth() {
   try {
     currentHealth = await window.api.health();
-    const modelText = currentHealth.model ? ` - ${currentHealth.model}` : "";
-
+    const label = providerLabel(currentHealth.provider || currentHealth.mode || "");
+    const mode = currentHealth.provider === "local-auto" ? "Local auto" : label.replace(/^Local \((.*)\)$/, "$1");
     statusText.textContent = currentHealth.ok
-      ? `Provider: ${currentHealth.label}${modelText}`
-      : `Provider: ${currentHealth.label} - ${currentHealth.error || "Not ready"}`;
+      ? `${mode} ready`
+      : userMessageFromError(currentHealth.error || "Not ready");
   } catch (error) {
     currentHealth = null;
-    statusText.textContent = `Provider: Unknown - ${error.message || error}`;
+    statusText.textContent = userMessageFromError(error);
   }
 }
 
@@ -1186,12 +1193,7 @@ async function boot() {
   await refreshHealth();
   await loadHistoryList();
   await loadLibraryList();
-
-  if (historySummaries.length) {
-    await openConversation(historySummaries[0].id);
-  } else {
-    await createNewConversation();
-  }
+  await createNewConversation();
 
   setInterval(refreshHealth, 20000);
   autoGrow();
