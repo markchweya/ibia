@@ -6,6 +6,8 @@
   "author": "Mark Chweya",
   "scripts": {
     "start": "npx electron .",
+    "site": "npm --prefix website run dev",
+    "site:build": "npm --prefix website run build",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
