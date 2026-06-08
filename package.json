@@ -31,7 +31,8 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": false
+      "allowToChangeInstallationDirectory": false,
+      "shortcutName": "ibia"
     },
     "publish": null
   }

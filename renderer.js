@@ -272,6 +272,7 @@ function isNearBottom(element, threshold = 140) {
 }
 
 function addBubble(text, kind) {
+  removeEmptyState();
   const stick = isNearBottom(messagesDiv);
   const div = document.createElement("div");
   const isError = /\*\*(Could not answer|Could not add|Could not load|Library upload failed|Upload failed|Library drop failed)\*\*/i.test(String(text || ""));
@@ -284,6 +285,10 @@ function addBubble(text, kind) {
   }
 
   return div;
+}
+
+function removeEmptyState() {
+  messagesDiv.querySelector(".emptyState")?.remove();
 }
 
 function userMessageFromError(error) {
@@ -1052,7 +1057,10 @@ sendBtn.addEventListener("click", () => {
   sendMessage(text);
 });
 
-input.addEventListener("input", autoGrow);
+input.addEventListener("input", () => {
+  if (input.value.trim()) removeEmptyState();
+  autoGrow();
+});
 
 input.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {

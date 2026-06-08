@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="ibia icon">
+  <defs>
+    <linearGradient id="bg" x1="36" y1="22" x2="220" y2="234" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#10141F"/>
+      <stop offset="1" stop-color="#070A12"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="86" y1="42" x2="156" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5A7BFF"/>
+      <stop offset="1" stop-color="#4A4DFF"/>
+    </linearGradient>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="url(#bg)"/>
+  <circle cx="128" cy="70" r="25" fill="url(#accent)" filter="url(#glow)"/>
+  <rect x="103" y="112" width="50" height="94" rx="9" fill="#F7F9FF"/>
+</svg>

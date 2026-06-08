@@ -11,9 +11,30 @@
     <div class="topbar" id="dragBar">
       <div class="leftBrand">
         <div class="brandLogo" aria-hidden="true">
-          <div class="brandLogoDot"></div>
           <div class="brandLogoText">
-            <span>i</span><span>b</span><span>i</span><span>a</span>
+            <svg class="brandWordmark" viewBox="0 0 300 150" role="img" aria-label="ibia">
+              <defs>
+                <linearGradient id="ibiaAccentApp" x1="10" y1="14" x2="32" y2="36" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stop-color="#5A7BFF"></stop>
+                  <stop offset="1" stop-color="#4A4DFF"></stop>
+                </linearGradient>
+                <filter id="ibiaGlowApp" x="-80%" y="-80%" width="260%" height="260%">
+                  <feGaussianBlur stdDeviation="4" result="blur"></feGaussianBlur>
+                  <feMerge>
+                    <feMergeNode in="blur"></feMergeNode>
+                    <feMergeNode in="SourceGraphic"></feMergeNode>
+                  </feMerge>
+                </filter>
+              </defs>
+              <circle class="brandAccentDot" cx="21" cy="25" r="9.8" fill="url(#ibiaAccentApp)" filter="url(#ibiaGlowApp)"></circle>
+              <rect class="brandShape" x="12" y="58" width="18" height="74" rx="3"></rect>
+              <rect class="brandShape" x="60" y="24" width="20" height="108" rx="3"></rect>
+              <path class="brandShape" fill-rule="evenodd" d="M103 54a40 40 0 1 1 0 80a40 40 0 0 1 0-80Zm0 22a18 18 0 1 0 0 36a18 18 0 0 0 0-36Z"></path>
+              <circle class="brandShape" cx="168" cy="25" r="9.8"></circle>
+              <rect class="brandShape" x="159" y="58" width="18" height="74" rx="3"></rect>
+              <path class="brandShape" fill-rule="evenodd" d="M234 54a40 40 0 1 1 0 80a40 40 0 0 1 0-80Zm0 22a18 18 0 1 0 0 36a18 18 0 0 0 0-36Z"></path>
+              <rect class="brandShape" x="265" y="58" width="18" height="74" rx="3"></rect>
+            </svg>
           </div>
         </div>
         <div class="brandSub" id="statusText">Checking providers...</div>

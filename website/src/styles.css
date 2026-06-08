@@ -164,53 +164,25 @@ button {
 }
 
 .wordmark {
-  display: inline-flex;
-  align-items: end;
-  gap: 0.075em;
-  color: #141821;
-  font-size: clamp(3.9rem, 8.8vw, 6.4rem);
-  font-weight: 830;
-  letter-spacing: 0;
-  line-height: 0.78;
+  display: inline-block;
+  width: clamp(13rem, 25vw, 19.5rem);
+  color: #10141f;
+  line-height: 0;
 }
 
 .wordmark.compact {
-  font-size: 2rem;
+  width: 4.35rem;
 }
 
-.letterI {
-  position: relative;
-  display: inline-grid;
-  width: 0.26em;
-  height: 1.07em;
-  align-items: end;
-  margin-right: 0.08em;
-}
-
-.wordStem {
+.wordmark svg {
   display: block;
-  width: 0.23em;
-  height: 0.66em;
-  border-radius: 0.018em;
-  background: currentColor;
+  width: 100%;
+  height: auto;
+  overflow: visible;
 }
 
-.wordDot {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 0.24em;
-  height: 0.24em;
-  border-radius: 999px;
-  transform: translateX(-50%);
-}
-
-.wordDot.blue {
-  background: linear-gradient(140deg, #6aa1ff 0%, var(--blue) 52%, var(--violet) 100%);
-}
-
-.wordDot.dark {
-  background: #141821;
+.wordShape {
+  fill: currentColor;
 }
 
 .kicker {
@@ -307,7 +279,7 @@ h2 {
 
 .contactPanel .wordmark {
   margin-bottom: 34px;
-  font-size: clamp(4.5rem, 11vw, 8rem);
+  width: clamp(14.5rem, 30vw, 24rem);
 }
 
 @media (max-width: 760px) {
@@ -362,11 +334,11 @@ h2 {
   }
 
   .wordmark {
-    font-size: clamp(4.2rem, 25vw, 7rem);
+    width: clamp(13rem, 70vw, 21rem);
   }
 
   .wordmark.compact {
-    font-size: 1.8rem;
+    width: 4.05rem;
   }
 
   h1 {
@@ -397,11 +369,11 @@ h2 {
   }
 
   .wordmark {
-    font-size: clamp(3.1rem, 17vw, 4.3rem);
+    width: clamp(10rem, 56vw, 13.5rem);
   }
 
   .wordmark.compact {
-    font-size: 1.55rem;
+    width: 3.5rem;
   }
 
   .kicker {
@@ -439,7 +411,7 @@ h2 {
 
   .contactPanel .wordmark {
     margin-bottom: 18px;
-    font-size: clamp(3.1rem, 17vw, 4.3rem);
+    width: clamp(10rem, 56vw, 13.5rem);
   }
 }
 
@@ -453,11 +425,11 @@ h2 {
   }
 
   .wordmark {
-    font-size: clamp(3.1rem, 7vw, 4.6rem);
+    width: clamp(10.5rem, 19vw, 14rem);
   }
 
   .wordmark.compact {
-    font-size: 1.65rem;
+    width: 3.75rem;
   }
 
   .kicker {
@@ -501,7 +473,7 @@ h2 {
 
   .contactPanel .wordmark {
     margin-bottom: 22px;
-    font-size: clamp(3.1rem, 7vw, 4.6rem);
+    width: clamp(10.5rem, 19vw, 14rem);
   }
 }
 

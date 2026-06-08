@@ -208,18 +208,34 @@ function SimpleSection({ icon, eyebrow, title, text, detail }) {
 }
 
 function Wordmark({ compact = false }) {
+  const gradientId = compact ? "ibiaDotGradientCompact" : "ibiaDotGradient";
+  const glowId = compact ? "ibiaDotGlowCompact" : "ibiaDotGlow";
+
   return (
-    <span className={compact ? "wordmark compact" : "wordmark"} aria-hidden="true">
-      <span className="letterI">
-        <span className="wordDot blue" />
-        <span className="wordStem" />
-      </span>
-      <span>b</span>
-      <span className="letterI">
-        <span className="wordDot dark" />
-        <span className="wordStem" />
-      </span>
-      <span>a</span>
+    <span className={compact ? "wordmark compact" : "wordmark"} aria-label="ibia">
+      <svg viewBox="0 0 300 150" role="img" aria-hidden="true">
+        <defs>
+          <linearGradient id={gradientId} x1="10" y1="14" x2="32" y2="36" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#5A7BFF" />
+            <stop offset="1" stopColor="#4A4DFF" />
+          </linearGradient>
+          <filter id={glowId} x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <circle className="wordAccentDot" cx="21" cy="25" r="9.8" fill={`url(#${gradientId})`} filter={`url(#${glowId})`} />
+        <rect className="wordShape" x="12" y="58" width="18" height="74" rx="3" />
+        <rect className="wordShape" x="60" y="24" width="20" height="108" rx="3" />
+        <path className="wordShape" fillRule="evenodd" d="M103 54a40 40 0 1 1 0 80a40 40 0 0 1 0-80Zm0 22a18 18 0 1 0 0 36a18 18 0 0 0 0-36Z" />
+        <circle className="wordShape" cx="168" cy="25" r="9.8" />
+        <rect className="wordShape" x="159" y="58" width="18" height="74" rx="3" />
+        <path className="wordShape" fillRule="evenodd" d="M234 54a40 40 0 1 1 0 80a40 40 0 0 1 0-80Zm0 22a18 18 0 1 0 0 36a18 18 0 0 0 0-36Z" />
+        <rect className="wordShape" x="265" y="58" width="18" height="74" rx="3" />
+      </svg>
     </span>
   );
 }

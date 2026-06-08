@@ -199,10 +199,14 @@ const CLOUD_PROVIDERS = {
 let win = null;
 let tray = null;
 
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
 const userCache = path.join(app.getPath("userData"), "Cache");
+fs.mkdirSync(userCache, { recursive: true });
 app.setPath("cache", userCache);
 app.commandLine.appendSwitch("disk-cache-dir", userCache);
+app.commandLine.appendSwitch("disable-http-cache");
 app.commandLine.appendSwitch("disable-gpu-cache");
+app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 app.commandLine.appendSwitch("disable-features", [
   "CalculateNativeWinOcclusion",
   "AutofillEnableAccountWalletStorage",
@@ -957,19 +961,13 @@ function createTray() {
 
 function registerShortcuts() {
   const shortcuts = ["Control+Alt+I", "Control+Shift+I"];
-  let active = "none";
 
   for (const accelerator of shortcuts) {
     const ok = globalShortcut.register(accelerator, toggleWindow);
     if (ok) {
-      active = accelerator;
       break;
     }
-
-    console.log("Shortcut failed:", accelerator);
   }
-
-  console.log("Shortcut active:", active);
 }
 
 async function ollamaListModels() {
@@ -1702,12 +1700,23 @@ function wireIPC() {
   });
 }
 
-app.whenReady().then(() => {
-  createWindow();
-  createTray();
-  wireIPC();
-  registerShortcuts();
-});
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    if (!win.isVisible()) win.show();
+    win.focus();
+  });
+
+  app.whenReady().then(() => {
+    createWindow();
+    createTray();
+    wireIPC();
+    registerShortcuts();
+  });
+}
 
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
