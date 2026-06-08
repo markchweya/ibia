@@ -35,6 +35,12 @@ const TEXT_FILE_EXTENSIONS = new Set([
 ]);
 
 const LOCAL_PROVIDER_IDS = new Set(["local-auto", "ollama", "foundry"]);
+const WINDOWS_APP_ID = "com.markchweya.ibia";
+const APP_ICON_PATH = path.join(__dirname, "build", "icon.ico");
+
+if (process.platform === "win32") {
+  app.setAppUserModelId(WINDOWS_APP_ID);
+}
 
 const PROVIDER_LABELS = {
   "local-auto": "Local (Auto)",
@@ -886,6 +892,7 @@ function createWindow() {
     fullscreenable: true,
     show: false,
     alwaysOnTop: true,
+    icon: APP_ICON_PATH,
     backgroundColor: "#00000000",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -934,10 +941,9 @@ function toggleWindow() {
 
 function createTray() {
   let icon = nativeImage.createEmpty();
-  const iconPath = path.join(__dirname, "build", "icon.ico");
 
-  if (fs.existsSync(iconPath)) {
-    icon = nativeImage.createFromPath(iconPath);
+  if (fs.existsSync(APP_ICON_PATH)) {
+    icon = nativeImage.createFromPath(APP_ICON_PATH);
   }
 
   tray = new Tray(icon);

@@ -9,7 +9,7 @@
       <stop offset="1" stop-color="#4A4DFF"/>
     </linearGradient>
     <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
-      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feGaussianBlur stdDeviation="5" result="blur"/>
       <feMerge>
         <feMergeNode in="blur"/>
         <feMergeNode in="SourceGraphic"/>
@@ -17,6 +17,6 @@
     </filter>
   </defs>
   <rect width="256" height="256" rx="58" fill="url(#bg)"/>
-  <circle cx="128" cy="70" r="25" fill="url(#accent)" filter="url(#glow)"/>
-  <rect x="103" y="112" width="50" height="94" rx="9" fill="#F7F9FF"/>
+  <circle cx="128" cy="67" r="21" fill="url(#accent)" filter="url(#glow)"/>
+  <rect x="111" y="108" width="34" height="102" rx="7" fill="#F7F9FF"/>
 </svg>

@@ -69,17 +69,17 @@ function drawIcon(size) {
       const bg = bgA.map((channel, i) => mix(channel, bgB[i], bgT));
       paintPixel(buffer, idx, bg, bgMask);
 
-      const glow = circleCoverage(x, y, 128, 70, 46) * 0.16;
+      const glow = circleCoverage(x, y, 128, 67, 36) * 0.11;
       if (glow > 0) paintPixel(buffer, idx, violet, glow);
 
-      const dotMask = circleCoverage(x, y, 128, 70, 25);
+      const dotMask = circleCoverage(x, y, 128, 67, 21);
       if (dotMask > 0) {
         const t = clamp(((x - 103) + (y - 45)) / 100, 0, 1);
         const dot = blue.map((channel, i) => mix(channel, violet[i], t));
         paintPixel(buffer, idx, dot, dotMask);
       }
 
-      const stemMask = roundedRectCoverage(x, y, 103, 112, 50, 94, 9);
+      const stemMask = roundedRectCoverage(x, y, 111, 108, 34, 102, 7);
       if (stemMask > 0) paintPixel(buffer, idx, white, stemMask);
     }
   }
