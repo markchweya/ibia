@@ -121,7 +121,12 @@ function setTheme(theme) {
 
 function toggleTheme() {
   const current = document.body.getAttribute("data-theme") || "dark";
+  document.body.classList.add("theme-changing");
   setTheme(current === "dark" ? "light" : "dark");
+  clearTimeout(toggleTheme._timer);
+  toggleTheme._timer = setTimeout(() => {
+    document.body.classList.remove("theme-changing");
+  }, 260);
 }
 
 function autoGrow() {

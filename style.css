@@ -62,6 +62,18 @@ body{
   font-family:"Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
+body.theme-changing,
+body.theme-changing *{
+  transition:
+    background-color 220ms ease,
+    background 220ms ease,
+    border-color 220ms ease,
+    color 220ms ease,
+    box-shadow 220ms ease,
+    fill 220ms ease,
+    stroke 220ms ease;
+}
+
 .app{
   position:relative;
   display:flex;
@@ -69,9 +81,7 @@ body{
   height:100vh;
   overflow:hidden;
   border-radius:28px;
-  background:
-    linear-gradient(180deg, var(--bg), var(--bg2)),
-    radial-gradient(circle at 12% 0%, rgba(111, 140, 255, 0.12), transparent 34%);
+  background:var(--bg);
   border:1px solid var(--stroke);
   box-shadow:0 34px 100px rgba(0, 0, 0, 0.5);
   backdrop-filter:blur(30px) saturate(120%);
@@ -81,13 +91,7 @@ body{
 }
 
 .app::before{
-  content:"";
-  position:absolute;
-  inset:-18%;
-  pointer-events:none;
-  background:
-    radial-gradient(circle at 18% 8%, rgba(111, 140, 255, 0.12), transparent 28%),
-    radial-gradient(circle at 88% 0%, rgba(138, 92, 255, 0.1), transparent 24%);
+  content:none;
 }
 
 .app > *{
@@ -117,8 +121,8 @@ body{
   justify-content:space-between;
   min-height:72px;
   padding:14px 16px;
-  background:rgba(255,255,255,0.018);
-  border-bottom:1px solid rgba(255,255,255,0.04);
+  background:var(--bg);
+  border-bottom:1px solid var(--stroke);
   -webkit-app-region:drag;
 }
 
@@ -250,19 +254,16 @@ body{
 #themeIconSun{
   position:absolute;
   display:none;
+  transition:opacity 180ms ease, transform 180ms ease;
 }
 
-#themeIconMoon{
-  fill:var(--text);
-  stroke:none;
-}
-
+#themeIconMoon,
 #themeIconSun,
 .gearIcon,
 .historyIcon{
   fill:none;
   stroke:var(--text);
-  stroke-width:2.2;
+  stroke-width:2;
   stroke-linecap:round;
   stroke-linejoin:round;
 }
