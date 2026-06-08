@@ -144,6 +144,13 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function styleEmoji(html) {
+  return String(html || "").replace(
+    /(\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?)*|\p{Emoji_Presentation})/gu,
+    '<span class="emoji">$1</span>'
+  );
+}
+
 function renderInline(text) {
   let html = escapeHtml(text);
   const codeTokens = [];
@@ -168,7 +175,7 @@ function renderInline(text) {
     html = html.replace(`\uE000${index}\uE001`, codeTokens[index]);
   }
 
-  return html;
+  return styleEmoji(html);
 }
 
 function renderTextBlock(block) {

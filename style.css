@@ -62,6 +62,18 @@ body{
   font-family:"Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
+.emoji,
+.toast{
+  font-family:"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", emoji, sans-serif;
+  font-variant-emoji:emoji;
+}
+
+.emoji{
+  display:inline-block;
+  line-height:1;
+  vertical-align:-0.12em;
+}
+
 body.theme-changing,
 body.theme-changing *{
   transition:
