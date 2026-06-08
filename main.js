@@ -250,6 +250,7 @@ function loadSettings() {
       api_key: data.api_key || data.openai_api_key || "",
       detected_api_provider: data.detected_api_provider || "",
       cloud_model: data.cloud_model || "",
+      display_name: data.display_name || "",
       local_speed_mode: LOCAL_SPEED_MODES.has(data.local_speed_mode) ? data.local_speed_mode : "fast",
       local_prefer: data.local_prefer || data.foundry_prefer || "phi-3.5",
       foundry_prefer: data.foundry_prefer || data.local_prefer || "phi-3.5",
@@ -267,6 +268,7 @@ function defaultSettings() {
     api_key: "",
     detected_api_provider: "",
     cloud_model: "",
+    display_name: "",
     local_speed_mode: "fast",
     local_prefer: "phi-3.5",
     foundry_prefer: "phi-3.5",
@@ -1510,6 +1512,7 @@ function wireIPC() {
       detectedProvider: settings.detected_api_provider || "",
       detectedProviderLabel: providerLabel(settings.detected_api_provider),
       cloudModel: settings.cloud_model || "",
+      displayName: settings.display_name || "",
       localSpeedMode: getLocalSpeedMode(settings),
       foundryPrefer: settings.local_prefer || settings.foundry_prefer || "phi-3.5"
     };
@@ -1554,6 +1557,12 @@ function wireIPC() {
     });
 
     return { ok: true };
+  });
+
+  ipcMain.handle("settings:setDisplayName", (event, name) => {
+    const value = String(name || "").trim().slice(0, 48);
+    saveSettings({ display_name: value });
+    return { ok: true, displayName: value };
   });
 
   ipcMain.handle("settings:setLocalSpeedMode", (event, mode) => {

@@ -20,6 +20,7 @@ const settingsPanel = document.getElementById("settingsPanel");
 const settingsCloseBtn = document.getElementById("settingsCloseBtn");
 const providerSelect = document.getElementById("providerSelect");
 const speedModeSelect = document.getElementById("speedModeSelect");
+const displayNameInput = document.getElementById("displayNameInput");
 const apiKeyInput = document.getElementById("apiKeyInput");
 const saveKeyBtn = document.getElementById("saveKeyBtn");
 const keyStatus = document.getElementById("keyStatus");
@@ -33,7 +34,6 @@ const themeIconMoon = document.getElementById("themeIconMoon");
 const themeIconSun = document.getElementById("themeIconSun");
 
 const uploadBtn = document.getElementById("uploadBtn");
-const saveReplyBtn = document.getElementById("saveReplyBtn");
 const fileMemory = document.getElementById("fileMemory");
 
 const DEFAULT_SYSTEM_PROMPT = "You are a helpful desktop assistant. Be friendly, practical, and concise.";
@@ -89,6 +89,7 @@ let currentHealth = null;
 let persistTimer = null;
 let libraryDragDepth = 0;
 let currentLocalSpeedMode = "fast";
+let displayName = "";
 const librarySearchCache = new Map();
 
 function createInitialChatHistory() {
@@ -277,7 +278,6 @@ function isNearBottom(element, threshold = 140) {
 }
 
 function addBubble(text, kind) {
-  removeEmptyState();
   const stick = isNearBottom(messagesDiv);
   const div = document.createElement("div");
   const isError = /\*\*(Could not answer|Could not add|Could not load|Library upload failed|Upload failed|Library drop failed)\*\*/i.test(String(text || ""));
@@ -293,6 +293,13 @@ function addBubble(text, kind) {
 }
 
 function removeEmptyState() {
+  const empty = messagesDiv.querySelector(".emptyState");
+  if (!empty) return;
+  empty.classList.add("leaving");
+  setTimeout(() => empty.remove(), 220);
+}
+
+function removeEmptyStateNow() {
   messagesDiv.querySelector(".emptyState")?.remove();
 }
 
@@ -629,11 +636,17 @@ function closeSettings() {
 function greet() {
   const div = document.createElement("div");
   div.className = "emptyState";
+  const greeting = displayName ? `How can I help, ${escapeHtml(displayName)}?` : "How can I help?";
   div.innerHTML = `
-    <div class="emptyStateTitle">What do you want to work on?</div>
-    <div class="emptyStateText">Ask a question, rewrite text, or add files for context.</div>
+    <div class="emptyStateTitle">${greeting}</div>
   `;
   messagesDiv.appendChild(div);
+}
+
+function refreshEmptyGreeting() {
+  const title = messagesDiv.querySelector(".emptyStateTitle");
+  if (!title) return;
+  title.textContent = displayName ? `How can I help, ${displayName}?` : "How can I help?";
 }
 
 function renderChatHistory() {
@@ -734,6 +747,9 @@ async function loadSettingsUI() {
 
   const settings = await window.api.settingsGet();
   providerSelect.value = settings.provider || "local-auto";
+  displayName = String(settings.displayName || "").trim();
+  displayNameInput.value = displayName;
+  refreshEmptyGreeting();
   currentLocalSpeedMode = settings.localSpeedMode || "fast";
   speedModeSelect.value = currentLocalSpeedMode;
   updateKeyStatus(settings);
@@ -899,11 +915,20 @@ async function sendMessage(text) {
   }
 
   busy = true;
+  const hadEmptyState = !!messagesDiv.querySelector(".emptyState");
+  removeEmptyState();
+  if (hadEmptyState) {
+    await new Promise((resolve) => setTimeout(resolve, 170));
+    removeEmptyStateNow();
+  }
+
   addBubble(message, "you");
   chatHistory.push({ role: "user", content: message });
   scheduleConversationSave();
 
-  const typing = addBubble("_Thinking..._", "ai");
+  const typing = addBubble("", "ai");
+  typing.classList.add("thinkingMsg");
+  typing.innerHTML = `<span class="thinkingDots" aria-label="Thinking"><span></span><span></span><span></span></span>`;
 
   try {
     const payloadHistory = await prepareHistoryForSend(chatHistory, message);
@@ -911,6 +936,7 @@ async function sendMessage(text) {
       messages: payloadHistory,
       media: buildMediaAttachments()
     });
+    typing.classList.remove("thinkingMsg");
     typing.innerHTML = renderMessage(reply);
     chatHistory.push({ role: "assistant", content: reply });
     lastAssistantReply = reply;
@@ -922,6 +948,7 @@ async function sendMessage(text) {
   } catch (error) {
     const friendlyError = userMessageFromError(error);
     const textValue = `**Could not answer**\n\n${friendlyError}`;
+    typing.classList.remove("thinkingMsg");
     typing.innerHTML = renderMessage(textValue);
     showToast(friendlyError);
   } finally {
@@ -1002,6 +1029,22 @@ speedModeSelect.addEventListener("change", async () => {
   await refreshHealth();
 });
 
+displayNameInput.addEventListener("input", () => {
+  displayName = displayNameInput.value.trim().slice(0, 48);
+  refreshEmptyGreeting();
+
+  clearTimeout(displayNameInput._timer);
+  displayNameInput._timer = setTimeout(async () => {
+    if (!window.api?.settingsSetDisplayName) {
+      showToast("Settings API not wired");
+      return;
+    }
+
+    const result = await window.api.settingsSetDisplayName(displayName);
+    if (!result?.ok) showToast(result?.error || "Could not save name");
+  }, 280);
+});
+
 saveKeyBtn.addEventListener("click", async () => {
   const key = apiKeyInput.value.trim();
   if (!key) {
@@ -1063,7 +1106,6 @@ sendBtn.addEventListener("click", () => {
 });
 
 input.addEventListener("input", () => {
-  if (input.value.trim()) removeEmptyState();
   autoGrow();
 });
 
@@ -1170,26 +1212,6 @@ libraryList.addEventListener("click", async (event) => {
 
   await window.api.libraryRemove(deleteButton.getAttribute("data-library-delete"));
   await loadLibraryList();
-});
-
-saveReplyBtn.addEventListener("click", async () => {
-  if (!lastAssistantReply.trim()) {
-    showToast("No AI reply to save yet");
-    return;
-  }
-
-  if (!window.api?.saveTextFile) {
-    showToast("Save API not wired");
-    return;
-  }
-
-  const result = await window.api.saveTextFile({
-    content: lastAssistantReply,
-    defaultPath: "ai-rewrite.md"
-  });
-
-  if (!result || result.canceled) return;
-  showToast("Reply saved");
 });
 
 function playEntrance() {

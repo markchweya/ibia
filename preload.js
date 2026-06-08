@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("api", {
   settingsSetProvider: (provider) => ipcRenderer.invoke("settings:setProvider", provider),
   settingsSetApiKey: (key) => ipcRenderer.invoke("settings:setApiKey", key),
   settingsSetOpenAIKey: (key) => ipcRenderer.invoke("settings:setApiKey", key),
+  settingsSetDisplayName: (name) => ipcRenderer.invoke("settings:setDisplayName", name),
   settingsSetLocalSpeedMode: (mode) => ipcRenderer.invoke("settings:setLocalSpeedMode", mode),
   settingsSetFoundryPrefer: (value) => ipcRenderer.invoke("settings:setFoundryPrefer", value),
   pickFiles: () => ipcRenderer.invoke("files:pick"),
