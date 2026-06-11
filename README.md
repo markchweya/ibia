@@ -9,7 +9,7 @@ ibia is a lightweight, system-wide desktop AI assistant for Windows that opens a
 * Press a **global hotkey** → a **floating chat window** appears (press again to hide)
 * Runs quietly in the background with a **tray icon** fallback
 * Lets you chat with **Phi-3.5-mini locally/offline**
-* Optionally switch to **OpenAI** if you add an API key
+* Optionally switch to **OpenAI, Claude, Grok, or DeepSeek** if you add an API key
 
 ---
 
@@ -21,7 +21,7 @@ ibia is a lightweight, system-wide desktop AI assistant for Windows that opens a
 * **Pluggable AI providers**
 
   * **Local (Default): Phi-3.5-mini**
-  * **OpenAI (Optional):** enabled via API key in Settings
+  * **Cloud providers (Optional):** OpenAI, Claude, Grok, and DeepSeek via API key in Settings
 * **Simple packaging** with `electron-builder` (Windows installer)
 
 ---
@@ -96,13 +96,13 @@ ollama pull phi3.5:mini
 
 ---
 
-## OpenAI Setup (Optional)
+## Cloud API Setup (Optional)
 
 1. Open **Settings** in the app
-2. Paste your **OpenAI API key**
-3. Choose **OpenAI** as the provider when you want cloud inference
+2. Paste an **OpenAI, Claude, Grok, or DeepSeek API key**
+3. Choose **API Key (Auto Detect)** or a specific cloud provider
 
-**Security note:** the key is stored locally on your machine in the app’s user data folder. Treat it like a password.
+**Security note:** API keys are stored only on your machine and encrypted at rest with Electron safeStorage, which uses the operating system's credential protection. Keys are never bundled with the app or exposed back to the renderer after saving.
 
 ---
 
@@ -114,7 +114,7 @@ ollama pull phi3.5:mini
   * offline work
   * privacy-sensitive content
   * low-latency prompts (depending on your machine)
-* Use **OpenAI** for:
+* Use **cloud providers** for:
 
   * higher accuracy needs
   * longer context (depending on model)
@@ -126,7 +126,7 @@ ollama pull phi3.5:mini
 
 * **Hotkey doesn’t work:** check if another app is using the same shortcut; change it in Settings (if supported).
 * **Local model not responding:** confirm your Phi-3.5-mini runtime/model path is correctly set and accessible.
-* **OpenAI errors:** verify the API key and that your network allows outbound requests.
+* **Cloud API errors:** verify the API key, selected provider, and that your network allows outbound requests.
 
 ---
 

@@ -1,6 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const { pathToFileURL } = require("url");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 
@@ -12,7 +13,9 @@ const {
   dialog,
   globalShortcut,
   ipcMain,
+  safeStorage,
   screen,
+  shell,
   Tray,
   Menu,
   nativeImage
@@ -37,6 +40,7 @@ const TEXT_FILE_EXTENSIONS = new Set([
 const LOCAL_PROVIDER_IDS = new Set(["local-auto", "ollama", "foundry"]);
 const WINDOWS_APP_ID = "com.markchweya.ibia";
 const APP_ICON_PATH = path.join(__dirname, "build", "icon.ico");
+const SECRET_ENCODING_PREFIX = "safeStorage:v1:";
 
 if (process.platform === "win32") {
   app.setAppUserModelId(WINDOWS_APP_ID);
@@ -231,6 +235,39 @@ function libraryPath() {
   return path.join(app.getPath("userData"), "document-library.json");
 }
 
+function encryptSecret(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error("Secure credential storage is not available on this device.");
+  }
+
+  return `${SECRET_ENCODING_PREFIX}${safeStorage.encryptString(text).toString("base64")}`;
+}
+
+function decryptSecret(value) {
+  const text = String(value || "");
+  if (!text.startsWith(SECRET_ENCODING_PREFIX)) return "";
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    return "";
+  }
+
+  try {
+    const payload = text.slice(SECRET_ENCODING_PREFIX.length);
+    return safeStorage.decryptString(Buffer.from(payload, "base64"));
+  } catch {
+    return "";
+  }
+}
+
+function readStoredApiKey(data = {}) {
+  return decryptSecret(data.api_key_encrypted)
+    || decryptSecret(data.openai_api_key_encrypted)
+    || String(data.api_key || data.openai_api_key || "").trim();
+}
+
 function extractorScriptPath() {
   return path.join(__dirname, "scripts", "extract_assets.py");
 }
@@ -247,14 +284,14 @@ function loadSettings() {
 
     return {
       provider: data.provider || "local-auto",
-      api_key: data.api_key || data.openai_api_key || "",
+      api_key: readStoredApiKey(data),
       detected_api_provider: data.detected_api_provider || "",
       cloud_model: data.cloud_model || "",
       display_name: data.display_name || "",
       local_speed_mode: LOCAL_SPEED_MODES.has(data.local_speed_mode) ? data.local_speed_mode : "fast",
       local_prefer: data.local_prefer || data.foundry_prefer || "phi-3.5",
       foundry_prefer: data.foundry_prefer || data.local_prefer || "phi-3.5",
-      openai_api_key: data.openai_api_key || "",
+      openai_api_key: "",
       last_api_detection_error: data.last_api_detection_error || ""
     };
   } catch {
@@ -280,7 +317,21 @@ function defaultSettings() {
 function saveSettings(partial) {
   const current = loadSettings();
   const merged = { ...current, ...partial };
-  fs.writeFileSync(settingsPath(), JSON.stringify(merged, null, 2), "utf-8");
+
+  const apiKey = String(merged.api_key || merged.openai_api_key || "").trim();
+  const data = {
+    provider: merged.provider || "local-auto",
+    api_key_encrypted: apiKey ? encryptSecret(apiKey) : "",
+    detected_api_provider: merged.detected_api_provider || "",
+    cloud_model: merged.cloud_model || "",
+    display_name: merged.display_name || "",
+    local_speed_mode: LOCAL_SPEED_MODES.has(merged.local_speed_mode) ? merged.local_speed_mode : "fast",
+    local_prefer: merged.local_prefer || merged.foundry_prefer || "phi-3.5",
+    foundry_prefer: merged.foundry_prefer || merged.local_prefer || "phi-3.5",
+    last_api_detection_error: merged.last_api_detection_error || ""
+  };
+
+  fs.writeFileSync(settingsPath(), JSON.stringify(data, null, 2), "utf-8");
   return merged;
 }
 
@@ -900,7 +951,25 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
+    }
+  });
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) {
+      shell.openExternal(url).catch(() => {});
+    }
+
+    return { action: "deny" };
+  });
+
+  win.webContents.on("will-navigate", (event, url) => {
+    const appUrl = pathToFileURL(path.join(__dirname, "index.html")).href;
+    if (url === appUrl) return;
+
+    event.preventDefault();
+    if (/^https?:\/\//i.test(url)) {
+      shell.openExternal(url).catch(() => {});
     }
   });
 
@@ -1421,6 +1490,10 @@ async function getHealthStatus() {
 async function saveApiKeyWithDetection(key) {
   const value = String(key || "").trim();
   if (!value) return { ok: false, error: "Empty key" };
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    return { ok: false, error: "Secure credential storage is not available on this device." };
+  }
 
   try {
     const detected = await detectCloudProvider(value);

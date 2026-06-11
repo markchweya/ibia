@@ -22,7 +22,19 @@
       "output": "dist"
     },
     "files": [
-      "**/*"
+      "index.html",
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "style.css",
+      "package.json",
+      "scripts/extract_assets.py",
+      "build/icon.ico",
+      "!**/.env",
+      "!**/.env.*",
+      "!dist/**",
+      "!website/**",
+      "!node_modules/.cache/**"
     ],
     "win": {
       "target": ["nsis"],
