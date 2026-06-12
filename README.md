@@ -130,6 +130,9 @@ ollama pull phi3.5:mini
 
 ---
 
+## Contact
+chweyahub@gmail.com
+
 ## License
 
 Refer to `LICENSE`.
