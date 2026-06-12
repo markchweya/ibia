@@ -1,6 +1,8 @@
 # ibia (Windows)
 
-ibia is a lightweight, system-wide desktop AI assistant for Windows that opens a floating chat window from a global keyboard shortcut. It’s designed for **fast, offline/local AI** first — using **Microsoft Phi-3.5-mini** as the default local model — with optional cloud providers when you add an API key in Settings.
+ibia is a Windows AI assistant that gives users instant access to AI from anywhere on their desktop. Launch it with a keyboard shortcut, chat using local or cloud models, work with documents, and continue conversations without leaving your workflow.
+
+Built around a local-first philosophy, ibia supports private, offline-friendly experiences through local AI runtimes such as Ollama and Foundry Local, while also allowing users to connect their own API keys for providers including OpenAI, Claude, Grok, and DeepSeek.
 
 ---
 
@@ -129,6 +131,9 @@ ollama pull phi3.5:mini
 * **Cloud API errors:** verify the API key, selected provider, and that your network allows outbound requests.
 
 ---
+
+## Contact
+chweyahub@gmail.com
 
 ## License
 
