@@ -318,12 +318,34 @@ function userMessageFromError(error) {
     .replace(/^Error:\s*/i, "")
     .trim();
 
+  message = extractProviderErrorMessage(message);
+
   if (/api key is invalid|invalid api key|incorrect api key|unauthorized|forbidden|401|403/i.test(message)) {
     return "API key is invalid.";
   }
 
   if (/api key not set|api key is missing|empty key/i.test(message)) {
     return "API key is missing.";
+  }
+
+  if (/insufficient[_\s-]*(quota|funds|balance)|exceeded your current quota|billing details|check your plan|balance/i.test(message)) {
+    return "Your API key does not have enough funds or quota. Please add credit or check your billing plan.";
+  }
+
+  if (/rate[_\s-]*limit|too many requests|429/i.test(message)) {
+    return "The AI provider is receiving too many requests right now. Please wait a moment and try again.";
+  }
+
+  if (/model.*(not found|does not exist|invalid)|invalid.*model/i.test(message)) {
+    return "The selected AI model is not available. Choose another model in settings and try again.";
+  }
+
+  if (/fetch failed|network|ENOTFOUND|ETIMEDOUT|ECONNRESET|ECONNREFUSED/i.test(message) && !/ollama|foundry/i.test(message)) {
+    return "Could not reach the AI provider. Please check your internet connection and try again.";
+  }
+
+  if (/service unavailable|server error|bad gateway|gateway timeout|HTTP 5\d\d|500|502|503|504/i.test(message)) {
+    return "The AI provider is having trouble right now. Please try again in a few minutes.";
   }
 
   if (/ollama/i.test(message) && /fetch failed|ECONNREFUSED|not running|connect/i.test(message)) {
@@ -351,6 +373,25 @@ function userMessageFromError(error) {
   }
 
   return message || "Something went wrong.";
+}
+
+function extractProviderErrorMessage(message) {
+  const text = String(message || "").trim();
+  const jsonStart = text.indexOf("{");
+  if (jsonStart === -1) return text;
+
+  try {
+    const parsed = JSON.parse(text.slice(jsonStart));
+    const providerMessage = parsed?.error?.message || parsed?.message || parsed?.detail || "";
+    const providerCode = parsed?.error?.code || parsed?.code || "";
+    const providerType = parsed?.error?.type || parsed?.type || "";
+    const parts = [providerMessage, providerCode, providerType].filter(Boolean);
+    if (parts.length) return parts.join(" ");
+  } catch {
+    // Keep the original message when a provider returns plain text.
+  }
+
+  return text;
 }
 
 function formatBytes(bytes) {
