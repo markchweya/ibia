@@ -54,7 +54,29 @@ jobs:
         with:
           persist-credentials: false
 
+      # Dependency review needs the repository's dependency graph. If it is
+      # switched off, say so loudly instead of failing every PR; the gate turns
+      # itself on as soon as the setting is enabled.
+      - name: Check the dependency graph is enabled
+        id: graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Skip only on the specific "graph is off" answer. Any other error
+          # lets the review run and fail visibly, so a token or API problem can
+          # never silently switch the gate off.
+          if out=$(gh api "repos/$GITHUB_REPOSITORY/dependency-graph/compare/$BASE...$HEAD" 2>&1 >/dev/null) \
+             || ! grep -qiE "not supported|dependency graph" <<<"$out"; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Dependency review skipped::The dependency graph is off for this repository. Enable it in Settings -> Code security so new dependencies are checked for vulnerabilities and licences."
+          fi
+
       - name: Review dependency changes
+        if: steps.graph.outputs.enabled == 'true'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
