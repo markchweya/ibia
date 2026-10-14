@@ -76,7 +76,7 @@ node scripts/generate_icon.js
 npm run dist:mac
 ```
 
-This produces `.dmg` and `.zip` for both **Apple Silicon (arm64)** and **Intel (x64)** in `dist/`. The macOS build is feature-identical to Windows: same chat, providers, library, history, tray/menu-bar icon, global shortcut, and Breathe. Two mac-specific details: the window uses the inset traffic-light title bar, and it is set to appear on every Space including over fullscreen apps, so Breathe can still reach you.
+This produces a single **universal** `.dmg` in `dist/` that runs natively on both **Apple Silicon** and **Intel** Macs. The macOS build is feature-identical to Windows: same chat, providers, library, history, tray/menu-bar icon, global shortcut, and Breathe. Two mac-specific details: the window uses the inset traffic-light title bar, and it is set to appear on every Space including over fullscreen apps, so Breathe can still reach you.
 
 Document extraction shells out to `python3` (`brew install python`, or the python.org installer). Without it, ibia still chats — only PDF/Office extraction is unavailable.
 
