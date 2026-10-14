@@ -1,6 +1,6 @@
 {
   "name": "ibia",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "main": "main.js",
   "description": "A lightweight desktop AI assistant with local and cloud model support.",
   "author": "Mark Chweya",
