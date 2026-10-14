@@ -14,6 +14,7 @@ const {
   globalShortcut,
   ipcMain,
   safeStorage,
+  session,
   screen,
   powerMonitor,
   shell,
@@ -2546,7 +2547,18 @@ if (!gotSingleInstanceLock) {
     showWindowNow();
   });
 
+  // The renderer is a local chat UI: it never needs the camera, microphone,
+  // location, notifications, USB, HID or any other permissioned API. Deny every
+  // request and check up front, so a compromised or injected page cannot ask.
+  app.on("web-contents-created", (event, contents) => {
+    contents.on("will-attach-webview", (attachEvent) => attachEvent.preventDefault());
+  });
+
   app.whenReady().then(() => {
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(false));
+    session.defaultSession.setPermissionCheckHandler(() => false);
+    session.defaultSession.setDevicePermissionHandler(() => false);
+
     applyAppearanceSettings();
     createApplicationMenu();
     createWindow();
