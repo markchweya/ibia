@@ -28,3 +28,4 @@ Thumbs.db
 __pycache__/
 *.pyc
 website/*.log
+npm-package/
