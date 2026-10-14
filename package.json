@@ -17,8 +17,8 @@
     "dist:win": "electron-builder --win"
   },
   "devDependencies": {
-    "electron": "30.0.5",
-    "electron-builder": "^24.13.3"
+    "electron": "44.7.2",
+    "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "com.markchweya.ibia",
