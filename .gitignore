@@ -27,3 +27,4 @@ Thumbs.db
 # Python cache
 __pycache__/
 *.pyc
+website/*.log
