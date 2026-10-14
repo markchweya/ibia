@@ -6,6 +6,27 @@ Built around a local-first philosophy, ibia supports private, offline-friendly e
 
 ---
 
+## Download
+
+Grab the latest version from the [**Releases page**](https://github.com/markchweya/ibia/releases/latest). There is exactly one file per platform:
+
+### 🍎 macOS: `ibia-<version>-macOS.dmg`
+1. Download the **`-macOS.dmg`** file. It works on every Mac, Apple Silicon and Intel.
+2. Open it and drag **ibia** into **Applications**.
+3. Open ibia from Applications. If macOS says it can't check it, go to **System Settings → Privacy & Security** and click **Open Anyway**. Press **Cmd + Shift + I** any time to show or hide it.
+
+### 🪟 Windows: `ibia-<version>-Windows-Setup.exe`
+1. Download the **`-Windows-Setup.exe`** file.
+2. Double-click it. If Windows SmartScreen appears, click **More info → Run anyway**.
+3. ibia installs and opens by itself. Press **Ctrl + Alt + I** any time to show or hide it.
+
+### 🐧 Linux: `ibia-<version>-Linux.AppImage`
+1. Download the **`-Linux.AppImage`** file.
+2. Make it runnable: right-click → **Properties → Allow executing as program**, or run `chmod +x ibia-*-Linux.AppImage`.
+3. Double-click it to start ibia. Press **Ctrl + Alt + I** any time to show or hide it.
+
+---
+
 ## What it does
 
 * Press a **global hotkey** → a **floating chat window** appears (press again to hide)
@@ -31,7 +52,7 @@ Built around a local-first philosophy, ibia supports private, offline-friendly e
 
 ## Requirements
 
-* Windows 10/11 or macOS
+* Windows 10/11, macOS 11+, or a modern x64 Linux desktop
 * Node.js (LTS recommended)
 * **Phi-3.5-mini local runtime** (choose one):
 
@@ -81,6 +102,22 @@ This produces a single **universal** `.dmg` in `dist/` that runs natively on bot
 Document extraction shells out to `python3` (`brew install python`, or the python.org installer). Without it, ibia still chats — only PDF/Office extraction is unavailable.
 
 See `MACOS_BUILD.md` for local testing, signing, and notarization notes.
+
+---
+
+## Build (Linux AppImage)
+
+```bash
+npm install
+node scripts/generate_icon.js
+npm run dist:linux
+```
+
+This produces `ibia-<version>-Linux.AppImage` in `dist/`, a single portable file that runs on any modern x64 distro. Document extraction uses the system `python3` with `pypdf`, `python-docx`, `python-pptx`, `openpyxl` and `Pillow` installed. The global shortcut needs an X11 session, or XWayland, because Wayland compositors do not let apps register global hotkeys.
+
+## Releases
+
+Pushing a tag such as `v1.0.4` makes `.github/workflows/build.yml` build all three platforms and publish a GitHub Release with exactly three files: `-macOS.dmg`, `-Windows-Setup.exe` and `-Linux.AppImage`. The release text comes from `.github/release-notes.md`. The tag must match the `version` in `package.json`.
 
 ---
 
