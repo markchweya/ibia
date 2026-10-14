@@ -1,6 +1,6 @@
 # The ibia.ai website as a small, hardened static container.
 #   docker run -p 8080:8080 ghcr.io/markchweya/ibia-website
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /site
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
