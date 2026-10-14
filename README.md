@@ -18,7 +18,7 @@ Built around a local-first philosophy, ibia supports private, offline-friendly e
 ## Features
 
 * **Global keyboard shortcut** to show/hide the window — rebindable in Settings
-* **Breathe**: ibia fades itself in, waits, then fades out again, so it can appear without any keypress. Hover it and it stays put; the fade timings are yours to set
+* **Breathe**: ibia fades itself in right beside your cursor — on whichever monitor, app, Space or fullscreen window you're in — waits, then fades out again, so it can appear without any keypress. Hover it and it stays put; click away after using it and it goes back to breathing. The fade timings are yours to set
 * **Floating UI**: movable, resizable, frameless
 * **Background mode** with **tray/menu bar icon**
 * **Pluggable AI providers**

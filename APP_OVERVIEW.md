@@ -9,7 +9,7 @@ ibia is useful for quick writing help, summarizing notes, asking coding question
 ## Key Features
 
 - **Floating desktop chat:** Open or hide the assistant quickly with a global hotkey, which the user can rebind.
-- **Breathe:** Instead of waiting to be summoned, ibia can fade itself into view, hold, and fade away again on a loop the user controls. Hovering it keeps it on screen.
+- **Breathe:** Instead of waiting to be summoned, ibia can fade itself into view beside the cursor — on any monitor, above fullscreen apps — hold, and fade away again on a loop the user controls. Hovering it keeps it on screen; clicking away after using it hands it back to the loop.
 - **Tray background mode:** Keep ibia running quietly and accessible from the Windows tray or the macOS menu bar.
 - **Local AI support:** Use local models through supported runtimes for privacy-sensitive or offline work.
 - **Cloud provider support:** Use OpenAI, Claude, Grok, or DeepSeek with the user's own API key.
