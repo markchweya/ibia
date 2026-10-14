@@ -9,7 +9,7 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^6.1.2",
     "vite": "^6.0.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
