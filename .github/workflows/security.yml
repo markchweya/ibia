@@ -64,11 +64,12 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
-          # Skip only on the specific "graph is off" answer. Any other error
-          # lets the review run and fail visibly, so a token or API problem can
-          # never silently switch the gate off.
+          # The compare API answers HTTP 403 when the dependency graph is off
+          # (the review action treats a 403 exactly this way). Skip only on
+          # that; any other error lets the review run and fail visibly, so an
+          # outage or a bad token can never silently switch the gate off.
           if out=$(gh api "repos/$GITHUB_REPOSITORY/dependency-graph/compare/$BASE...$HEAD" 2>&1 >/dev/null) \
-             || ! grep -qiE "not supported|dependency graph" <<<"$out"; then
+             || ! grep -q "HTTP 403" <<<"$out"; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
