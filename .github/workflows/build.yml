@@ -1,0 +1,337 @@
+name: Build & Release
+
+# Every push and pull request builds ibia for all three platforms, plus the
+# website container, so a broken build shows up before release.
+#
+# Pushing a v* tag (or running this workflow by hand with "release" ticked)
+# also publishes:
+#   - a GitHub Release with exactly three files (macOS, Windows, Linux), each
+#     with a signed SLSA build-provenance attestation and its SHA-256 listed
+#   - the website container to ghcr.io, with SBOM, provenance and a CVE scan
+#   - the @markchweya/ibia npm package to GitHub Packages
+#
+# Supply-chain hygiene: every third-party action is pinned to a full commit
+# SHA (the trailing comment names the release), the default token is
+# read-only and each job asks only for what it needs, checkouts do not keep
+# credentials on disk, and harden-runner audits each runner's network egress.
+on:
+  push:
+    branches:
+      - main
+      - master
+      - "codex/**"
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish a release for the version in package.json"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: 24
+  IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release) }}
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            command: npm run dist:mac -- --publish never
+            artifact: dist/*-macOS.dmg
+          - name: Windows
+            os: windows-latest
+            command: npm run dist:win -- --publish never
+            artifact: dist/*-Windows-Setup.exe
+          - name: Linux
+            os: ubuntu-latest
+            command: npm run dist:linux -- --publish never
+            artifact: dist/*-Linux.AppImage
+
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        # zizmor: ignore[cache-poisoning] -- caching is switched off below whenever IS_RELEASE is true
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          # Release builds install clean: a poisoned cache must never end up
+          # inside a signed installer.
+          cache: ${{ env.IS_RELEASE != 'true' && 'npm' || '' }}
+          package-manager-cache: ${{ env.IS_RELEASE != 'true' }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate app icons
+        run: node scripts/generate_icon.js
+
+      - name: Build ${{ matrix.name }} app
+        shell: bash
+        run: |
+          # An unset secret expands to an empty string, and electron-builder reads
+          # an empty CSC_LINK as a certificate *path* — which resolves to the
+          # project directory and fails with "<projectDir> not a file". Drop the
+          # empty values so it takes the unsigned path instead.
+          if [ -z "$CSC_LINK" ]; then
+            echo "No signing certificate configured - building unsigned."
+            unset CSC_LINK CSC_KEY_PASSWORD
+          fi
+
+          if [ -z "$APPLE_ID" ]; then
+            echo "No Apple ID configured - skipping notarization."
+            unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+          fi
+
+          ${{ matrix.command }}
+        env:
+          # Mac signing material only ever reaches the macOS job.
+          CSC_LINK: ${{ matrix.name == 'macOS' && secrets.MACOS_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.name == 'macOS' && secrets.MACOS_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.name == 'macOS' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.name == 'macOS' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.name == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
+
+      - name: Upload ${{ matrix.name }} installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ibia-${{ matrix.name }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 14
+
+  website:
+    name: Website container
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io (release only)
+      id-token: write # sign the provenance attestation
+      attestations: write
+      security-events: write # upload the Trivy scan to code scanning
+
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GitHub Container Registry
+        if: env.IS_RELEASE == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/ibia-website
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ env.IS_RELEASE == 'true' }}
+            type=sha
+
+      - name: Build image (and push on release)
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: website
+          load: ${{ env.IS_RELEASE != 'true' }}
+          push: ${{ env.IS_RELEASE == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: ${{ env.IS_RELEASE == 'true' }}
+          provenance: ${{ env.IS_RELEASE == 'true' && 'mode=max' || 'false' }}
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          format: sarif
+          output: trivy-website.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Upload scan to code scanning
+        # Fork PRs get a read-only token, so only upload from this repository.
+        if: always() && hashFiles('trivy-website.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: trivy-website.sarif
+          category: trivy-website
+
+      - name: Attest image provenance
+        if: env.IS_RELEASE == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/ibia-website
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  release:
+    name: Publish release
+    needs: [build, website]
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # create the release
+      id-token: write # sign the provenance attestations
+      attestations: write
+
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Work out the version
+        id: version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+            if [ "$tag" != "v$version" ]; then
+              echo "::error::Tag $tag does not match package.json version $version"
+              exit 1
+            fi
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Collect the three installers
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ibia-*
+          path: release
+          merge-multiple: true
+
+      - name: Check there are exactly three files
+        run: |
+          ls -la release
+          count=$(find release -type f | wc -l)
+          if [ "$count" -ne 3 ]; then
+            echo "::error::Expected 3 release files, found $count"
+            exit 1
+          fi
+
+      - name: Attest installer provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: release/*
+
+      - name: Write release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          sed "s/{{VERSION}}/$VERSION/g" .github/release-notes.md > release-notes.md
+          {
+            echo
+            echo "### 🔐 Verify your download"
+            echo
+            echo "Each file is built by GitHub Actions from this tag and carries a signed [build provenance attestation](https://github.com/${GITHUB_REPOSITORY}/attestations). With the GitHub CLI:"
+            echo
+            echo '```'
+            echo "gh attestation verify <file> --repo ${GITHUB_REPOSITORY}"
+            echo '```'
+            echo
+            echo "SHA-256 checksums:"
+            echo
+            echo '```'
+            (cd release && sha256sum *)
+            echo '```'
+          } >> release-notes.md
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "ibia $VERSION" \
+            --notes-file release-notes.md \
+            --latest \
+            "release/ibia-$VERSION-macOS.dmg" \
+            "release/ibia-$VERSION-Windows-Setup.exe" \
+            "release/ibia-$VERSION-Linux.AppImage"
+
+  npm-package:
+    name: Publish npm package
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js for GitHub Packages
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://npm.pkg.github.com
+          scope: "@markchweya"
+          package-manager-cache: false
+
+      - name: Stage and publish @markchweya/ibia
+        run: |
+          node scripts/generate_icon.js
+          node scripts/prepare_npm_package.js
+          cd npm-package
+          npm publish --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

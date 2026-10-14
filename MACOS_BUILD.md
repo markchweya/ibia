@@ -11,7 +11,7 @@ npm run pack:mac
 npm run dist:mac
 ```
 
-`pack:mac` creates an unpacked `.app` for smoke testing. `dist:mac` creates the distributable `.dmg` and `.zip` in `dist/`, for **arm64 and x64** — four artifacts, so Apple Silicon and Intel Macs each get a native build. To build a single architecture while iterating:
+`pack:mac` creates an unpacked `.app` for smoke testing. `dist:mac` creates one distributable **universal** `.dmg` in `dist/` (`ibia-<version>-macOS.dmg`) that runs natively on both Apple Silicon and Intel Macs, so users never have to pick an architecture. To build a single architecture while iterating:
 
 ```bash
 npx electron-builder --mac --arm64
@@ -52,6 +52,6 @@ Unsigned local builds are fine for internal testing, but users will see macOS Ga
 
 ## GitHub Actions
 
-The `.github/workflows/build-macos.yml` workflow builds the macOS `.dmg` and `.zip` on `macos-latest` and uploads them as `ibia-macos`. Add the signing values above as repository secrets to produce signed/notarized release builds.
+The `.github/workflows/build.yml` workflow builds the universal macOS `.dmg` on `macos-latest` (alongside the Windows and Linux builds) and uploads it as `ibia-macos`. Pushing a `v*` tag also publishes it to a GitHub Release. Add the signing values above as repository secrets to produce signed/notarized release builds.
 
 Until those secrets exist the workflow builds **unsigned** artifacts, which is fine for testing but shows Gatekeeper warnings on other machines. The build step drops the signing variables when they are empty: GitHub expands an unset secret to an empty string, and electron-builder reads an empty `CSC_LINK` as a certificate *path* rather than "no certificate", failing with `<projectDir> not a file`. Adding the secrets later needs no workflow change — the same step picks them up and signs.

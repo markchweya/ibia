@@ -1,8 +1,9 @@
 {
   "name": "ibia",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "main": "main.js",
   "description": "A lightweight desktop AI assistant with local and cloud model support.",
+  "desktopName": "ibia.desktop",
   "author": "Mark Chweya",
   "scripts": {
     "start": "npx electron .",
@@ -11,11 +12,14 @@
     "pack": "electron-builder --dir",
     "pack:mac": "electron-builder --mac --dir",
     "dist": "electron-builder",
-    "dist:mac": "electron-builder --mac"
+    "dist:mac": "electron-builder --mac",
+    "pack:linux": "electron-builder --linux --dir",
+    "dist:linux": "electron-builder --linux",
+    "dist:win": "electron-builder --win"
   },
   "devDependencies": {
-    "electron": "30.0.5",
-    "electron-builder": "^24.13.3"
+    "electron": "44.7.2",
+    "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "com.markchweya.ibia",
@@ -42,13 +46,20 @@
       "!node_modules/.cache/**"
     ],
     "win": {
-      "target": ["nsis"],
-      "icon": "build/icon.ico"
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "${productName}-${version}-Windows-Setup.${ext}"
     },
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] },
-        { "target": "zip", "arch": ["arm64", "x64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
       ],
       "icon": "build/icon.icns",
       "category": "public.app-category.productivity",
@@ -60,7 +71,23 @@
       "extendInfo": {
         "LSMinimumSystemVersion": "11.0",
         "NSHighResolutionCapable": true
-      }
+      },
+      "artifactName": "${productName}-${version}-macOS.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "synopsis": "A floating desktop AI assistant",
+      "artifactName": "${productName}-${version}-Linux.${ext}",
+      "syncDesktopName": true
     },
     "dmg": {
       "backgroundColor": "#10141f",

@@ -1,0 +1,85 @@
+name: Security
+
+# Fast security gates that run alongside the build:
+#   - secret scanning of every commit (gitleaks)
+#   - dependency review: block PRs that add a known-vulnerable or
+#     copyleft-incompatible dependency
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Check out full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Scan for leaked secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+
+  dependencies:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write # post the summary comment
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Dependency review needs the repository's dependency graph. If it is
+      # switched off, say so loudly instead of failing every PR; the gate turns
+      # itself on as soon as the setting is enabled.
+      - name: Check the dependency graph is enabled
+        id: graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # The compare API answers HTTP 403 when the dependency graph is off
+          # (the review action treats a 403 exactly this way). Skip only on
+          # that; any other error lets the review run and fail visibly, so an
+          # outage or a bad token can never silently switch the gate off.
+          if out=$(gh api "repos/$GITHUB_REPOSITORY/dependency-graph/compare/$BASE...$HEAD" 2>&1 >/dev/null) \
+             || ! grep -q "HTTP 403" <<<"$out"; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Dependency review skipped::The dependency graph is off for this repository. Enable it in Settings -> Code security so new dependencies are checked for vulnerabilities and licences."
+          fi
+
+      - name: Review dependency changes
+        if: steps.graph.outputs.enabled == 'true'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          deny-licenses: AGPL-3.0-only, AGPL-3.0-or-later, GPL-3.0-only, GPL-3.0-or-later
+          comment-summary-in-pr: on-failure

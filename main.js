@@ -14,7 +14,9 @@ const {
   globalShortcut,
   ipcMain,
   safeStorage,
+  session,
   screen,
+  powerMonitor,
   shell,
   Tray,
   Menu,
@@ -46,7 +48,8 @@ const BREATHE_MAX_MS = 600000;
 const WINDOWS_APP_ID = "com.markchweya.ibia";
 const IS_MAC = process.platform === "darwin";
 const IS_WINDOWS = process.platform === "win32";
-const APP_ICON_PATH = path.join(__dirname, "build", IS_MAC ? "icon.png" : "icon.ico");
+// Electron reads .ico only on Windows; macOS and Linux need the PNG.
+const APP_ICON_PATH = path.join(__dirname, "build", IS_WINDOWS ? "icon.ico" : "icon.png");
 const SECRET_ENCODING_PREFIX = "safeStorage:v1:";
 const DEFAULT_SHORTCUT = IS_MAC ? "Command+Shift+I" : "Control+Alt+I";
 const FALLBACK_SHORTCUTS = IS_MAC
@@ -241,6 +244,11 @@ let ambientHovered = false;
 let ambientInteractive = true;
 let ambientOwnsHide = false;
 let windowOpacity = 1;
+let openDialogs = 0;
+
+// Gap between the cursor and the window when Breathe brings ibia in beside it.
+const AMBIENT_CURSOR_GAP = 24;
+const AMBIENT_RESUME_DELAY_MS = 1500;
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 const userCache = path.join(app.getPath("userData"), "Cache");
@@ -844,11 +852,11 @@ function readUploadedFile(filePath) {
 }
 
 async function pickFilesForUpload() {
-  const result = await dialog.showOpenDialog(win, {
+  const result = await withDialog(() => dialog.showOpenDialog(win, {
     title: "Open files for ibia",
     defaultPath: app.getPath("downloads"),
     properties: ["openFile", "multiSelections"]
-  });
+  }));
 
   if (result.canceled || !result.filePaths.length) {
     return { canceled: true, files: [], rejected: [] };
@@ -864,11 +872,11 @@ async function pickFilesForUpload() {
 }
 
 async function importLibraryDocuments() {
-  const result = await dialog.showOpenDialog(win, {
+  const result = await withDialog(() => dialog.showOpenDialog(win, {
     title: "Add study files to the library",
     defaultPath: app.getPath("downloads"),
     properties: ["openFile", "multiSelections"]
-  });
+  }));
 
   if (result.canceled || !result.filePaths.length) {
     return { canceled: true, added: [], rejected: [] };
@@ -1051,15 +1059,26 @@ function describeExtractionError(error) {
   return message;
 }
 
+// A native dialog takes focus from the window; while one is open the blur is
+// not the user walking away, so Breathe must not resume.
+async function withDialog(open) {
+  openDialogs += 1;
+  try {
+    return await open();
+  } finally {
+    openDialogs = Math.max(0, openDialogs - 1);
+  }
+}
+
 async function saveTextToFile(content, defaultPath = "") {
-  const result = await dialog.showSaveDialog(win, {
+  const result = await withDialog(() => dialog.showSaveDialog(win, {
     title: "Save AI output",
     defaultPath: defaultPath || "ibia-output.txt",
     filters: [
       { name: "Text files", extensions: ["txt", "md"] },
       { name: "All files", extensions: ["*"] }
     ]
-  });
+  }));
 
   if (result.canceled || !result.filePath) {
     return { canceled: true };
@@ -1109,6 +1128,7 @@ function createWindow() {
     // Let Breathe reach the user on whichever Space or fullscreen app is front.
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   }
+  raiseAboveEverything();
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) {
@@ -1136,6 +1156,18 @@ function createWindow() {
 
   win.on("hide", () => {
     handleWindowHidden();
+  });
+
+  // ibia lives in the tray, so minimizing means "out of my way": hide it and
+  // let Breathe carry on instead of leaving it stranded in the taskbar/Dock.
+  win.on("minimize", () => {
+    win.hide();
+  });
+
+  // Clicking away after using ibia hands it back to Breathe rather than
+  // leaving it pinned over whatever the user went back to.
+  win.on("blur", () => {
+    resumeBreathingAfterUse();
   });
 
 
@@ -1289,6 +1321,72 @@ function cursorOverWindow() {
   }
 }
 
+// The highest window level both platforms allow, so a fullscreen video, game,
+// slideshow or another always-on-top app cannot bury ibia. Windows can quietly
+// drop a topmost window behind a newer one, so this is re-applied every breath.
+function raiseAboveEverything() {
+  if (!win || win.isDestroyed()) return;
+  win.setAlwaysOnTop(true, "screen-saver");
+  win.moveTop();
+}
+
+// Breathe brings ibia in beside the cursor, on whichever display the cursor is
+// on, like the cursor itself. It opens toward the side with more room so it
+// never lands under the pointer (which would read as a hover and pin it).
+function placeBesideCursor() {
+  if (!win || win.isDestroyed() || win.isMaximized() || win.isFullScreen()) return;
+
+  let point;
+  let area;
+  try {
+    point = screen.getCursorScreenPoint();
+    area = screen.getDisplayNearestPoint(point).workArea;
+  } catch {
+    return;
+  }
+
+  const { width: winW, height: winH } = win.getBounds();
+  const width = Math.min(winW, area.width);
+  const height = Math.min(winH, area.height);
+  const gap = AMBIENT_CURSOR_GAP;
+
+  const roomRight = area.x + area.width - point.x;
+  const roomLeft = point.x - area.x;
+  let x = roomRight >= roomLeft ? point.x + gap : point.x - gap - width;
+
+  const roomBelow = area.y + area.height - point.y;
+  const roomAbove = point.y - area.y;
+  let y = roomBelow >= roomAbove ? point.y + gap : point.y - gap - height;
+
+  x = Math.round(Math.min(Math.max(x, area.x), area.x + area.width - width));
+  y = Math.round(Math.min(Math.max(y, area.y), area.y + area.height - height));
+
+  win.setBounds({ x, y, width, height }, false);
+}
+
+// The user used ibia and moved on: go back to breathing from the visible
+// phase, so it fades out on the usual timer unless the cursor is on it.
+function resumeBreathingAfterUse() {
+  if (!ambientEnabled || !ambientManual || openDialogs > 0) return;
+  if (!win || win.isDestroyed() || !win.isVisible()) return;
+
+  ambientManual = false;
+  ambientPhase = "visible";
+  setAmbientInteractive(true);
+  startAmbientHoverWatch();
+  ambientHovered = cursorOverWindow();
+  scheduleAmbient(ambientVisibleMs, ambientFadeOutStep);
+}
+
+// After sleep or the lock screen the old timers are meaningless; breathe in
+// shortly so ibia is there when the user is back.
+function restartBreathingAfterAway() {
+  if (!ambientRunning() || win.isVisible()) return;
+
+  clearAmbientTimers();
+  startAmbientCycle(AMBIENT_RESUME_DELAY_MS);
+}
+
 function startAmbientHoverWatch() {
   if (ambientHoverTimer) return;
 
@@ -1338,10 +1436,17 @@ function ambientFadeInStep() {
   setWindowOpacity(0);
   setAmbientInteractive(false);
 
+  // A minimized Mac window stays in the Dock when shown; bring it back first.
+  if (IS_MAC && win.isMinimized()) win.restore();
+
   if (!win.isVisible()) {
     // showInactive keeps the user's current app in front; ibia just appears.
     win.showInactive();
   }
+
+  // Still fully transparent here, so the move is never seen.
+  placeBesideCursor();
+  raiseAboveEverything();
 
   startAmbientHoverWatch();
   ambientHovered = cursorOverWindow();
@@ -1477,6 +1582,9 @@ function createTray() {
   if (fs.existsSync(APP_ICON_PATH)) {
     icon = nativeImage.createFromPath(APP_ICON_PATH);
     if (IS_MAC) icon = icon.resize({ width: 18, height: 18 });
+    // Linux trays draw the image at its native size; the 1024px PNG would be
+    // clipped or blurred, so hand them a tray-sized one.
+    else if (!IS_WINDOWS) icon = icon.resize({ width: 22, height: 22 });
   }
 
   tray = new Tray(icon);
@@ -2439,13 +2547,27 @@ if (!gotSingleInstanceLock) {
     showWindowNow();
   });
 
+  // The renderer is a local chat UI: it never needs the camera, microphone,
+  // location, notifications, USB, HID or any other permissioned API. Deny every
+  // request and check up front, so a compromised or injected page cannot ask.
+  app.on("web-contents-created", (event, contents) => {
+    contents.on("will-attach-webview", (attachEvent) => attachEvent.preventDefault());
+  });
+
   app.whenReady().then(() => {
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(false));
+    session.defaultSession.setPermissionCheckHandler(() => false);
+    session.defaultSession.setDevicePermissionHandler(() => false);
+
     applyAppearanceSettings();
     createApplicationMenu();
     createWindow();
     createTray();
     wireIPC();
     registerShortcuts();
+
+    powerMonitor.on("resume", restartBreathingAfterAway);
+    powerMonitor.on("unlock-screen", restartBreathingAfterAway);
   });
 
   app.on("activate", () => {
