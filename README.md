@@ -1,5 +1,10 @@
 # ibia (Desktop)
 
+[![Build & Release](https://github.com/markchweya/ibia/actions/workflows/build.yml/badge.svg)](https://github.com/markchweya/ibia/actions/workflows/build.yml)
+[![CodeQL](https://github.com/markchweya/ibia/actions/workflows/codeql.yml/badge.svg)](https://github.com/markchweya/ibia/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/markchweya/ibia/badge)](https://securityscorecards.dev/viewer/?uri=github.com/markchweya/ibia)
+[![Latest release](https://img.shields.io/github/v/release/markchweya/ibia)](https://github.com/markchweya/ibia/releases/latest)
+
 ibia is a desktop AI assistant that gives users instant access to AI from anywhere on their computer. Launch it with a keyboard shortcut, chat using local or cloud models, work with documents, and continue conversations without leaving your workflow.
 
 Built around a local-first philosophy, ibia supports private, offline-friendly experiences through local AI runtimes such as Ollama and Foundry Local, while also allowing users to connect their own API keys for providers including OpenAI, Claude, Grok, and DeepSeek.
@@ -24,6 +29,38 @@ Grab the latest version from the [**Releases page**](https://github.com/markchwe
 1. Download the **`-Linux.AppImage`** file.
 2. Make it runnable: right-click → **Properties → Allow executing as program**, or run `chmod +x ibia-*-Linux.AppImage`.
 3. Double-click it to start ibia. Press **Ctrl + Alt + I** any time to show or hide it.
+
+---
+
+## Packages
+
+ibia is also published to [GitHub Packages](https://github.com/markchweya?tab=packages&repo_name=ibia):
+
+* **npm**: `@markchweya/ibia` adds an `ibia` command that launches the app with its own Electron runtime. GitHub's npm registry needs a [personal access token](https://github.com/settings/tokens) with `read:packages`:
+
+  ```bash
+  npm login --scope=@markchweya --auth-type=legacy --registry=https://npm.pkg.github.com
+  npm install -g @markchweya/ibia
+  ibia
+  ```
+
+* **Container**: `ghcr.io/markchweya/ibia-website` is the ibia.ai website as a small, non-root nginx image with security headers:
+
+  ```bash
+  docker run -p 8080:8080 ghcr.io/markchweya/ibia-website
+  ```
+
+---
+
+## Security
+
+ibia keeps API keys encrypted with your OS's secure storage, sends no telemetry, runs its UI sandboxed with a strict CSP, and denies every device and sensor permission. Every release is built in CI with signed provenance you can verify:
+
+```bash
+gh attestation verify <downloaded-file> --repo markchweya/ibia
+```
+
+See [SECURITY.md](SECURITY.md) for the full model and how to report a vulnerability privately.
 
 ---
 
