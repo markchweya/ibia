@@ -3,6 +3,7 @@
   "version": "1.0.4",
   "main": "main.js",
   "description": "A lightweight desktop AI assistant with local and cloud model support.",
+  "desktopName": "ibia.desktop",
   "author": "Mark Chweya",
   "scripts": {
     "start": "npx electron .",
@@ -85,7 +86,8 @@
       "icon": "build/icon.png",
       "category": "Utility",
       "synopsis": "A floating desktop AI assistant",
-      "artifactName": "${productName}-${version}-Linux.${ext}"
+      "artifactName": "${productName}-${version}-Linux.${ext}",
+      "syncDesktopName": true
     },
     "dmg": {
       "backgroundColor": "#10141f",
