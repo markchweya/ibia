@@ -47,7 +47,8 @@ const BREATHE_MAX_MS = 600000;
 const WINDOWS_APP_ID = "com.markchweya.ibia";
 const IS_MAC = process.platform === "darwin";
 const IS_WINDOWS = process.platform === "win32";
-const APP_ICON_PATH = path.join(__dirname, "build", IS_MAC ? "icon.png" : "icon.ico");
+// Electron reads .ico only on Windows; macOS and Linux need the PNG.
+const APP_ICON_PATH = path.join(__dirname, "build", IS_WINDOWS ? "icon.ico" : "icon.png");
 const SECRET_ENCODING_PREFIX = "safeStorage:v1:";
 const DEFAULT_SHORTCUT = IS_MAC ? "Command+Shift+I" : "Control+Alt+I";
 const FALLBACK_SHORTCUTS = IS_MAC
@@ -1580,6 +1581,9 @@ function createTray() {
   if (fs.existsSync(APP_ICON_PATH)) {
     icon = nativeImage.createFromPath(APP_ICON_PATH);
     if (IS_MAC) icon = icon.resize({ width: 18, height: 18 });
+    // Linux trays draw the image at its native size; the 1024px PNG would be
+    // clipped or blurred, so hand them a tray-sized one.
+    else if (!IS_WINDOWS) icon = icon.resize({ width: 22, height: 22 });
   }
 
   tray = new Tray(icon);
