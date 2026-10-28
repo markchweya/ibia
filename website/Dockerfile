@@ -9,7 +9,7 @@ RUN npm run build
 
 # nginx-unprivileged runs as a non-root user (uid 101) on port 8080, so the
 # container needs no root and no privileged port.
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 LABEL org.opencontainers.image.source="https://github.com/markchweya/ibia" \
       org.opencontainers.image.title="ibia website" \
       org.opencontainers.image.description="The ibia.ai landing site: a local-first desktop AI assistant, one shortcut away." \
