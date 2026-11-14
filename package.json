@@ -1,6 +1,6 @@
 {
   "name": "ibia",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "main": "main.js",
   "description": "A lightweight desktop AI assistant with local and cloud model support.",
   "desktopName": "ibia.desktop",

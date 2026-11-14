@@ -154,7 +154,7 @@ This produces `ibia-<version>-Linux.AppImage` in `dist/`, a single portable file
 
 ## Releases
 
-Pushing a tag such as `v1.0.4` makes `.github/workflows/build.yml` build all three platforms and publish a GitHub Release with exactly three files: `-macOS.dmg`, `-Windows-Setup.exe` and `-Linux.AppImage`. The release text comes from `.github/release-notes.md`. The tag must match the `version` in `package.json`.
+Pushing a tag such as `v1.0.5` makes `.github/workflows/build.yml` build all three platforms and publish a GitHub Release with the three installers (`-macOS.dmg`, `-Windows-Setup.exe`, `-Linux.AppImage`) plus a `README.md`. The README and the release-page text both come from `.github/release-readme.md`. The tag must match the `version` in `package.json`.
 
 ---
 
