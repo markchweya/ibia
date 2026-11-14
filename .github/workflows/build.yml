@@ -262,16 +262,20 @@ jobs:
         with:
           subject-path: release/*
 
-      - name: Write release notes
+      - name: Build the README asset and release notes
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          sed "s/{{VERSION}}/$VERSION/g" .github/release-notes.md > release-notes.md
+          # One source of truth: the README that ships as a download also
+          # becomes the release-page text, so both say the same thing.
+          mkdir -p upload
+          sed "s/{{VERSION}}/$VERSION/g" .github/release-readme.md > upload/README.md
+          cp upload/README.md release-notes.md
           {
             echo
             echo "### 🔐 Verify your download"
             echo
-            echo "Each file is built by GitHub Actions from this tag and carries a signed [build provenance attestation](https://github.com/${GITHUB_REPOSITORY}/attestations). With the GitHub CLI:"
+            echo "Each installer is built by GitHub Actions from this tag and carries a signed [build provenance attestation](https://github.com/${GITHUB_REPOSITORY}/attestations). With the GitHub CLI:"
             echo
             echo '```'
             echo "gh attestation verify <file> --repo ${GITHUB_REPOSITORY}"
@@ -289,12 +293,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          # Four assets: the README plus the one installer per platform.
           gh release create "v$VERSION" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "ibia $VERSION" \
             --notes-file release-notes.md \
             --latest \
+            "upload/README.md" \
             "release/ibia-$VERSION-macOS.dmg" \
             "release/ibia-$VERSION-Windows-Setup.exe" \
             "release/ibia-$VERSION-Linux.AppImage"
